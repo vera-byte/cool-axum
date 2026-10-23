@@ -104,3 +104,24 @@ cool-axum/
 - 新增 `modules` crate（`modules/modules.rs`），对齐 cool-admin-go `modules/modules.go`
 - 各模块自治 `spec()`（表+种子）/ `init()`（启动钩子）
 - 新增模块只需在注册中心加两行
+
+
+## Unreleased · 路由自动注册与模块初始化
+
+### 路由注册分发到各模块（对齐 cool.RegisterController）
+- 各模块 `route_groups()` 自动带入 open / comm / biz 路由
+- `modules/modules.rs` 注册中心统一装配，新增模块一行接入
+- 删除 `src/routes.rs`，src/ 仅保留入口（main/app）
+
+### 登录/用户接口并入 base 模块
+- `login/logout` → `controller/admin/base_open.rs`
+- `userinfo` → `controller/admin/base_comm.rs`
+- 删除 `src/routes/auth.rs`
+
+### 模块初始化对齐 base/base.go
+- 各模块 `init()` 内自治 `FillInitData` 种子初始化
+- 种子数据不再由 app.rs 中央灌入
+
+### 质量
+- `cargo fmt` 全量格式化
+- `cargo clippy` 0 告警（type alias、Box 枚举等）

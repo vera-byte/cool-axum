@@ -335,3 +335,16 @@ docker compose up -d --build
 - `modules/modules.rs`：聚合 `all_specs / all_tables / all_seeds / boot_all`
 - 各模块 `spec()` / `init()` 自治声明
 - `src/app.rs` 仅调用注册中心，不硬编码模块
+
+
+## 十一、路由自动注册与模块初始化
+
+对齐 cool-admin-go 的 `cool.RegisterController` 与 `base/base.go init()`：
+
+| 项 | 说明 |
+|----|------|
+| 路由自动注册 | 各模块 `route_groups()` 声明 open/comm/biz，注册中心装配 |
+| 模块初始化 | 各模块 `init()` 内 FillInitData + 专属启动（对齐 base.go） |
+| src/ 精简 | 仅 main.rs / app.rs，无 routes/auth 集中代码 |
+| 新增模块 | `modules/modules.rs` registered() 加一行即接入全部能力 |
+| 质量 | fmt + clippy 0 告警 |

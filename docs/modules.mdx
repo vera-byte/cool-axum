@@ -164,3 +164,63 @@ modules/base/          modules/dict/
 | `POST/GET /admin/dict/info/data` | **匿名** | 字典数据（`types` 过滤） |
 | `/admin/dict/type`、`/dict/type` | 登录+权限 | 字典类型 CRUD |
 | `/admin/dict/info`、`/dict/info` | 登录+权限 | 字典项 CRUD |
+
+---
+
+## 模块注册机制（对齐 cool-admin-go）
+
+### 路由自动注册
+
+各模块通过 `route_groups()` 声明路由分组，注册中心自动装配（对齐 `cool.RegisterController`）：
+
+```rust
+// modules/base/src/lib.rs
+pub fn route_groups<S>() -> RouteGroups<S> {
+    RouteGroups::new()
+        .open(open_routes::<S>())    // 免登录：captcha/login/eps
+        .comm(comm_routes::<S>())    // 仅登录：permmenu/person/upload
+        .biz(routes::<S>())          // 登录+权限：base_sys_* CRUD
+}
+```
+
+`modules/modules.rs` 统一装配三组中间件：
+
+| 分组 | 中间件 | 对齐 Go |
+|------|--------|---------|
+| open | 无鉴权 | `/admin/*/open/*` |
+| comm | token 归一 | `/admin/*/comm/*` AuthComm |
+| biz | check_login + authority | `/admin/*` |
+
+### 模块初始化（对齐 base/base.go init）
+
+各模块 `init()` 自治完成种子填充与专属启动：
+
+```rust
+// modules/base/src/lib.rs（对齐 base.go init()）
+pub async fn init(db: &DbManager, cache: CacheManager) {
+    tracing::debug!("module base init start ...");
+
+    // FillInitData 逐表初始化
+    cool_db::fill_init_data(db, "default", "base_sys_menu", initjson::MENU).await;
+    // ...8 张表
+
+    login::init_cache(cache);      // 模块专属
+    login::seed_admin_if_empty(db).await;
+
+    tracing::debug!("module base init finished ...");
+}
+```
+
+### 新增模块接入
+
+```rust
+// 1. modules/foo/src/lib.rs
+pub fn spec() -> ModuleSpec { ModuleSpec::new("foo").tables(all_tables()) }
+pub fn init(...) { /* FillInitData + 专属启动 */ }
+pub fn route_groups<S>() -> RouteGroups<S> { ... }
+
+// 2. modules/modules.rs 的 registered() 加一行
+("foo", mod_foo::route_groups::<S>),
+```
+
+表 / 种子 / 路由 / 启动钩子即自动接入。

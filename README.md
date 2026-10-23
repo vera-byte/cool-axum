@@ -119,9 +119,14 @@ cool-axum/
 ├── Cargo.toml             # package（bin）+ workspace
 ├── src/                   # 启动入口（cargo run 直接可用）
 │   ├── main.rs
-│   ├── app.rs
-│   └── routes/
-│       └── auth.rs
+│   └── app.rs             # 装配 + health/index
+├── modules/               # 业务模块（对齐 cool-admin-go/modules）
+│   ├── modules.rs         # 模块注册中心（对齐 modules/modules.go）
+│   ├── base/              # 用户/角色/菜单/部门/参数/日志/上传/权限/登录
+│   ├── dict/              # 数据字典
+│   ├── task/              # 定时任务 + 调度器
+│   ├── space/             # 文件空间
+│   └── demo/              # 示例模块
 ├── crates/                # 基础设施库
 │   ├── cool-config/       # 配置加载（对齐 cool-admin-go config.yaml）
 │   ├── cool-db/           # 数据源、autoMigrate、种子填充
@@ -130,13 +135,6 @@ cool-axum/
 │   ├── cool-cache/        # 缓存：内存 / Redis 双模式
 │   ├── cool-file/         # 文件上传：local / minio / oss
 │   └── cool-gen/          # 代码生成器 CLI
-├── modules/               # 业务模块（对齐 cool-admin-go/modules）
-│   ├── src/modules.rs     # 模块注册中心（对齐 modules/modules.go）
-│   ├── base/              # 用户/角色/菜单/部门/参数/日志/上传/权限
-│   ├── dict/              # 数据字典
-│   ├── task/              # 定时任务 + 调度器
-│   ├── space/             # 文件空间
-│   └── demo/              # 示例模块
 ├── docs/                  # Mintlify 文档站
 ├── deploy/                # nginx.conf / K8s 清单
 ├── config.yaml            # 配置文件
