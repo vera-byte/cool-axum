@@ -54,14 +54,15 @@ impl LocalDriver {
         let dir_path = self.root.join(&dir);
         std::fs::create_dir_all(&dir_path).map_err(|e| FileError::Save(e.to_string()))?;
 
-        let unique = format!("{}_{}", uuid::Uuid::new_v4().simple(), sanitize_filename(filename));
+        let unique = format!(
+            "{}_{}",
+            uuid::Uuid::new_v4().simple(),
+            sanitize_filename(filename)
+        );
         let path = dir_path.join(&unique);
         std::fs::write(&path, data).map_err(|e| FileError::Save(e.to_string()))?;
 
-        Ok(format!(
-            "{}/public/uploads/{}/{}",
-            self.domain, dir, unique
-        ))
+        Ok(format!("{}/public/uploads/{}/{}", self.domain, dir, unique))
     }
 }
 
@@ -110,7 +111,10 @@ impl ObjectDriver {
 
         let resp = client
             .put(&url)
-            .header("Authorization", format!("AWS {}:{}", self.access_key, self.secret_key))
+            .header(
+                "Authorization",
+                format!("AWS {}:{}", self.access_key, self.secret_key),
+            )
             .header("Content-Type", "application/octet-stream")
             .body(data.to_vec())
             .send()
@@ -207,7 +211,9 @@ pub fn create_driver(file: &FileConfig) -> Result<FileDriver, FileError> {
                 .oss
                 .as_ref()
                 .ok_or_else(|| FileError::UnknownMode(format!("{}: 缺少 oss 配置", file.mode)))?;
-            Ok(FileDriver::Object(ObjectDriver::from_oss(&file.mode, file, oss)))
+            Ok(FileDriver::Object(ObjectDriver::from_oss(
+                &file.mode, file, oss,
+            )))
         }
         other => Err(FileError::UnknownMode(other.to_string())),
     }

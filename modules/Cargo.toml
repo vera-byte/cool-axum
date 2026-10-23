@@ -3,16 +3,21 @@ name = "modules"
 version.workspace = true
 edition.workspace = true
 
+[lib]
+name = "modules"
+path = "modules.rs"
+
 [dependencies]
 cool-core = { workspace = true }
 cool-db = { workspace = true }
 cool-cache = { workspace = true }
+cool-auth = { workspace = true }
+axum = { workspace = true }
+tracing = { workspace = true }
+sa-token-plugin-axum = { workspace = true }
 mod-base = { workspace = true }
 mod-dict = { workspace = true }
 mod-demo = { workspace = true }
 mod-task = { workspace = true }
 mod-space = { workspace = true }
-
-[lib]
-name = "modules"
-path = "modules.rs"
+tower-http = { version = "0.6", features = ["fs"] }

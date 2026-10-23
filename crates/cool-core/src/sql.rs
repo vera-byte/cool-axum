@@ -162,8 +162,11 @@ impl SqlBuilder {
     /// col = value
     pub fn eq(mut self, col: &str, val: impl Into<ParamValue>) -> Self {
         if is_safe_ident(col) {
-            self.wheres
-                .push(format!("{} = {}", quote_ident(col), val.into().to_sql_literal()));
+            self.wheres.push(format!(
+                "{} = {}",
+                quote_ident(col),
+                val.into().to_sql_literal()
+            ));
         }
         self
     }
@@ -210,8 +213,11 @@ impl SqlBuilder {
     /// col <> value
     pub fn neq(mut self, col: &str, val: impl Into<ParamValue>) -> Self {
         if is_safe_ident(col) {
-            self.wheres
-                .push(format!("{} <> {}", quote_ident(col), val.into().to_sql_literal()));
+            self.wheres.push(format!(
+                "{} <> {}",
+                quote_ident(col),
+                val.into().to_sql_literal()
+            ));
         }
         self
     }
@@ -226,21 +232,18 @@ impl SqlBuilder {
 
     /// LEFT JOIN table AS alias ON condition
     pub fn left_join(mut self, table: &str, alias: &str, condition: &str) -> Self {
-        self.joins.push(format!(
-            "LEFT JOIN {table} AS {alias} ON {condition}"
-        ));
+        self.joins
+            .push(format!("LEFT JOIN {table} AS {alias} ON {condition}"));
         self
     }
     pub fn right_join(mut self, table: &str, alias: &str, condition: &str) -> Self {
-        self.joins.push(format!(
-            "RIGHT JOIN {table} AS {alias} ON {condition}"
-        ));
+        self.joins
+            .push(format!("RIGHT JOIN {table} AS {alias} ON {condition}"));
         self
     }
     pub fn inner_join(mut self, table: &str, alias: &str, condition: &str) -> Self {
-        self.joins.push(format!(
-            "INNER JOIN {table} AS {alias} ON {condition}"
-        ));
+        self.joins
+            .push(format!("INNER JOIN {table} AS {alias} ON {condition}"));
         self
     }
 
@@ -263,10 +266,10 @@ impl SqlBuilder {
 
     fn where_clause(&self) -> String {
         let mut parts = self.wheres.clone();
-        if let Some(col) = &self.soft_delete_col {
-            if is_safe_ident(col) {
-                parts.push(format!("{col} IS NULL"));
-            }
+        if let Some(col) = &self.soft_delete_col
+            && is_safe_ident(col)
+        {
+            parts.push(format!("{col} IS NULL"));
         }
         if parts.is_empty() {
             String::new()
@@ -351,10 +354,10 @@ impl SqlBuilder {
             quote_ident(table),
             sets.join(", ")
         );
-        if let Some(col) = soft_delete_col {
-            if is_safe_ident(col) {
-                let _ = write!(sql, " AND {} IS NULL", quote_ident(col));
-            }
+        if let Some(col) = soft_delete_col
+            && is_safe_ident(col)
+        {
+            let _ = write!(sql, " AND {} IS NULL", quote_ident(col));
         }
         sql
     }

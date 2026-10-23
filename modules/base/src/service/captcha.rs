@@ -123,34 +123,6 @@ fn sanitize_color(c: &str) -> String {
     "#fff".into()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn generate_captcha_shape() {
-        let (id, uri, code) = generate(150, 45, "#2c3142");
-        assert_eq!(code.len(), 4);
-        assert!(code.chars().all(|c| c.is_ascii_digit()));
-        assert!(!id.is_empty());
-        assert!(uri.starts_with("data:image/svg+xml;base64,"));
-    }
-
-    #[test]
-    fn color_sanitized() {
-        assert_eq!(sanitize_color("#2c3142"), "#2c3142");
-        assert_eq!(sanitize_color("red"), "red");
-        assert_eq!(sanitize_color("';><script"), "#fff");
-        assert_eq!(sanitize_color(""), "#fff");
-    }
-
-    #[tokio::test]
-    async fn verify_one_time() {
-        // 无缓存时放行
-        assert!(verify("any", "1234").await);
-    }
-}
-
 /// 开放路由（无需登录），对齐 cool-admin-go `/admin/base/open/*`
 ///
 /// - GET  /admin/base/open/captcha
@@ -187,11 +159,42 @@ pub fn open_routes<S: Clone + Send + Sync + 'static>() -> axum::Router<S> {
     }
 
     // 带 State 的包装（保持 Router<S> 类型统一）
-    async fn captcha_with_state<S>(_st: State<S>, q: Query<CaptchaQuery>) -> Json<cool_core::response::BaseRes> {
+    async fn captcha_with_state<S>(
+        _st: State<S>,
+        q: Query<CaptchaQuery>,
+    ) -> Json<cool_core::response::BaseRes> {
         captcha(q).await
     }
 
     Router::new()
         .route("/admin/base/open/captcha", get(captcha_with_state::<S>))
         .route("/base/open/captcha", get(captcha_with_state::<S>))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generate_captcha_shape() {
+        let (id, uri, code) = generate(150, 45, "#2c3142");
+        assert_eq!(code.len(), 4);
+        assert!(code.chars().all(|c| c.is_ascii_digit()));
+        assert!(!id.is_empty());
+        assert!(uri.starts_with("data:image/svg+xml;base64,"));
+    }
+
+    #[test]
+    fn color_sanitized() {
+        assert_eq!(sanitize_color("#2c3142"), "#2c3142");
+        assert_eq!(sanitize_color("red"), "red");
+        assert_eq!(sanitize_color("';><script"), "#fff");
+        assert_eq!(sanitize_color(""), "#fff");
+    }
+
+    #[tokio::test]
+    async fn verify_one_time() {
+        // 无缓存时放行
+        assert!(verify("any", "1234").await);
+    }
 }

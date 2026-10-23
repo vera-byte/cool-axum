@@ -1,18 +1,25 @@
 //! base_sys_menu 控制器（对齐 controller/admin/base_sys_menu.go）
 
+use super::base_comm::FileState;
 use axum::Router;
-use cool_core::controller::{crud_router, ApiAllow};
+use cool_core::controller::{ApiAllow, crud_router};
 use cool_core::service::CrudService;
 use cool_core::{CrudState, QueryOp};
-use super::base_comm::FileState;
 
 fn service() -> CrudService {
-
     CrudService::new("base_sys_menu")
         .not_null_key("name", "菜单名称不能为空")
-        .list_op(QueryOp::new().field_eq(&["parentId", "type", "isShow"]).key_word_field(&["name", "router", "perms"]))
-        .page_op(QueryOp::new().field_eq(&["parentId", "type", "isShow"]).key_word_field(&["name", "router", "perms"]).add_orderby("orderNum", "asc"))
-
+        .list_op(
+            QueryOp::new()
+                .field_eq(&["parentId", "type", "isShow"])
+                .key_word_field(&["name", "router", "perms"]),
+        )
+        .page_op(
+            QueryOp::new()
+                .field_eq(&["parentId", "type", "isShow"])
+                .key_word_field(&["name", "router", "perms"])
+                .add_orderby("orderNum", "asc"),
+        )
 }
 
 /// 注册路由

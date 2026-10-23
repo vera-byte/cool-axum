@@ -13,6 +13,10 @@ pub async fn get_by_user(db: &DbManager, user_id: i64) -> Vec<i64> {
     );
     query_rows_on(pool, &sql)
         .await
-        .map(|rows| rows.iter().filter_map(|r| r.get("roleId").and_then(|v| v.as_i64())).collect())
+        .map(|rows| {
+            rows.iter()
+                .filter_map(|r| r.get("roleId").and_then(|v| v.as_i64()))
+                .collect()
+        })
         .unwrap_or_default()
 }

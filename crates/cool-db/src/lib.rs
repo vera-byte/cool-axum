@@ -181,9 +181,8 @@ pub async fn fill_init_data(
     }
 
     // 落账
-    let rec = format!(
-        "INSERT INTO `base_sys_init` (`table`, `group`) VALUES ('{t_esc}', '{g_esc}')"
-    );
+    let rec =
+        format!("INSERT INTO `base_sys_init` (`table`, `group`) VALUES ('{t_esc}', '{g_esc}')");
     let _ = pool.execute(&rec).await;
 
     tracing::info!(group, table, inserted, "种子数据初始化完成");
@@ -194,18 +193,16 @@ async fn query_count(pool: &DbPool, sql: &str) -> Result<u64, DbError> {
     // 用 execute 不合适，走轻量查询
     match pool {
         DbPool::MySql(p) => {
-            let rows = sqlx::query(sql)
-                .fetch_all(p)
-                .await
-                .map_err(sql_err)?;
-            Ok(first_count(&rows.iter().map(mysql_row_value).collect::<Vec<_>>()))
+            let rows = sqlx::query(sql).fetch_all(p).await.map_err(sql_err)?;
+            Ok(first_count(
+                &rows.iter().map(mysql_row_value).collect::<Vec<_>>(),
+            ))
         }
         DbPool::Postgres(p) => {
-            let rows = sqlx::query(sql)
-                .fetch_all(p)
-                .await
-                .map_err(sql_err)?;
-            Ok(first_count(&rows.iter().map(pg_row_value).collect::<Vec<_>>()))
+            let rows = sqlx::query(sql).fetch_all(p).await.map_err(sql_err)?;
+            Ok(first_count(
+                &rows.iter().map(pg_row_value).collect::<Vec<_>>(),
+            ))
         }
     }
 }
@@ -254,7 +251,11 @@ fn build_insert_json(table: &str, data: &serde_json::Map<String, serde_json::Val
     let mut vals = Vec::new();
     for (k, v) in data {
         // gorm 默认软删除列名 → cool-admin-go 配置列名
-        let key = if k == "deleted_at" { "deleteTime" } else { k.as_str() };
+        let key = if k == "deleted_at" {
+            "deleteTime"
+        } else {
+            k.as_str()
+        };
         // 标识符安全校验（含 table/group 保留字，靠反引号）
         let safe = !key.is_empty()
             && key
@@ -300,9 +301,7 @@ impl DbManager {
     ///
     /// 单个数据源连接失败不阻断启动（记录错误，健康检查可探测到），
     /// 与 cool-admin-go 的宽松启动行为对齐。
-    pub async fn init(
-        databases: &HashMap<String, DatabaseEntry>,
-    ) -> Result<Self, DbError> {
+    pub async fn init(databases: &HashMap<String, DatabaseEntry>) -> Result<Self, DbError> {
         let mut pools = HashMap::new();
         for (group, entry) in databases {
             match connect_entry(entry).await {

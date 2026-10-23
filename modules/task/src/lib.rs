@@ -10,13 +10,13 @@ pub mod scheduler;
 use axum::extract::State;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use cool_core::controller::{crud_router, ApiAllow};
-use cool_core::response::{fail, ok, BaseRes};
-use cool_core::service::CrudService;
 use cool_core::QueryOp;
+use cool_core::controller::{ApiAllow, crud_router};
+use cool_core::response::{BaseRes, fail, ok};
+use cool_core::service::CrudService;
 use cool_db::{ColumnMeta, TableDef};
 use scheduler::Scheduler;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 fn col(name: &str, sql_type: &str, not_null: bool, comment: &str) -> ColumnMeta {
     ColumnMeta {
@@ -130,7 +130,8 @@ pub fn routes<S: cool_core::CrudState + TaskState>() -> Router<S> {
     };
 
     // task_info：delete/info/list/page 走通用，add/update 自定义联动调度器
-    let r = crud_router(
+
+    crud_router(
         "/task/info",
         task_info_service(),
         ApiAllow {
@@ -143,9 +144,7 @@ pub fn routes<S: cool_core::CrudState + TaskState>() -> Router<S> {
     .route("/task/info/add", post(add_task::<S>))
     .route("/task/info/update", post(update_task::<S>))
     .route("/task/info/once", post(once_task::<S>))
-    .route("/task/info/status", get(scheduler_status::<S>));
-
-    r
+    .route("/task/info/status", get(scheduler_status::<S>))
 }
 
 /// 暴露调度器给 handler
@@ -232,10 +231,10 @@ async fn sync_enable(sched: &Scheduler, id: i64) {
     );
     match cool_core::service::query_rows_on(pool, &sql).await {
         Ok(rows) => {
-            if let Some(row) = rows.first() {
-                if let Err(e) = sched.enable(id, row).await {
-                    tracing::error!(task_id = id, error = %e, "启用任务失败");
-                }
+            if let Some(row) = rows.first()
+                && let Err(e) = sched.enable(id, row).await
+            {
+                tracing::error!(task_id = id, error = %e, "启用任务失败");
             }
         }
         Err(e) => tracing::error!(error = %e, "读取任务定义失败"),
@@ -249,14 +248,31 @@ fn as_map(v: &Value) -> Map<String, Value> {
     }
 }
 
-/// 模块注册声明（对齐 task/task.go init）
+/// 模块注册声明：业务表
 pub fn spec() -> cool_core::ModuleSpec {
-    cool_core::ModuleSpec::new("task")
-        .tables(all_tables())
-        .seeds(vec![("task_info", initjson::TASK_INFO)])
+    cool_core::ModuleSpec::new("task").tables(all_tables())
 }
 
-/// 模块启动钩子：注册内置任务函数
-pub async fn init(_db: &cool_db::DbManager) {
+/// 模块初始化（对齐 task/task.go init()）
+pub async fn init(db: &cool_db::DbManager, _cache: cool_cache::CacheManager) {
+    tracing::debug!("module task init start ...");
+
+    // FillInitData
+    match cool_db::fill_init_data(db, "default", "task_info", initjson::TASK_INFO).await {
+        Ok(n) => tracing::debug!(table = "task_info", inserted = n, "FillInitData"),
+        Err(e) => tracing::error!(error = %e, "FillInitData 失败"),
+    }
+
+    // 启用调度：加载 status=1 任务（对齐 task.go 遍历 TaskAddTask）
     funcs::register_builtins();
+
+    tracing::debug!("module task init finished ...");
+}
+
+/// 路由分组
+pub fn route_groups<S>() -> cool_core::RouteGroups<S>
+where
+    S: cool_core::CrudState + crate::TaskState + Clone + Send + Sync + 'static,
+{
+    cool_core::RouteGroups::new().biz(routes::<S>())
 }

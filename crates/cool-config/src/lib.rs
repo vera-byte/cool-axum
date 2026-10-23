@@ -128,6 +128,7 @@ fn default_redis_address() -> String {
 /// cool 节
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct CoolConfig {
     #[serde(default)]
     pub auto_migrate: bool,
@@ -135,16 +136,6 @@ pub struct CoolConfig {
     pub eps: bool,
     #[serde(default)]
     pub file: FileConfig,
-}
-
-impl Default for CoolConfig {
-    fn default() -> Self {
-        Self {
-            auto_migrate: false,
-            eps: false,
-            file: FileConfig::default(),
-        }
-    }
 }
 
 /// 文件上传配置

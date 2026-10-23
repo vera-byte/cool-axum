@@ -16,7 +16,7 @@ mod crud;
 mod module;
 mod schema;
 
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use cool_config::AppConfig;
 use cool_db::DbManager;
 
@@ -43,7 +43,9 @@ async fn main() -> anyhow::Result<()> {
             module::create_module(name)?;
         }
         "crud" => {
-            let table = args.get(1).context("用法: cool-gen crud <table> [--module <name>]")?;
+            let table = args
+                .get(1)
+                .context("用法: cool-gen crud <table> [--module <name>]")?;
             let mut module = String::new();
             let mut i = 2;
             while i < args.len() {

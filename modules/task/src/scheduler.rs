@@ -162,29 +162,20 @@ impl Scheduler {
                 let sched = s
                     .parse::<cron::Schedule>()
                     .map_err(|e| format!("cron 表达式非法: {e}"))?;
-                Schedule::Cron(sched)
+                Schedule::Cron(Box::new(sched))
             }
         };
 
         let db = self.db.clone();
         let task_id = id.to_string();
         let handle = tokio::spawn(async move {
-            run_loop(
-                db,
-                task_id,
-                schedule,
-                service,
-                start_date,
-                end_date,
-                limit,
-            )
-            .await;
+            run_loop(db, task_id, schedule, service, start_date, end_date, limit).await;
         });
 
-        jobs().lock().unwrap().insert(
-            id.to_string(),
-            JobState { handle },
-        );
+        jobs()
+            .lock()
+            .unwrap()
+            .insert(id.to_string(), JobState { handle });
 
         self.set_next_run_time(id).await;
         tracing::info!(task_id = id, "任务已启用");
@@ -264,7 +255,7 @@ impl Scheduler {
 }
 
 enum Schedule {
-    Cron(cron::Schedule),
+    Cron(Box<cron::Schedule>),
     Interval(u64), // 秒
 }
 
@@ -283,9 +274,7 @@ async fn run_loop(
         // 计算下次执行时刻
         let next: Option<DateTime<Utc>> = match &schedule {
             Schedule::Cron(s) => s.upcoming(Utc).next(),
-            Schedule::Interval(secs) => {
-                Some(Utc::now() + chrono::Duration::seconds(*secs as i64))
-            }
+            Schedule::Interval(secs) => Some(Utc::now() + chrono::Duration::seconds(*secs as i64)),
         };
         let Some(next) = next else {
             tracing::warn!(task_id, "无法计算下次执行时间，任务退出");
@@ -305,11 +294,11 @@ async fn run_loop(
                     tracing::info!(task_id, "任务已过结束时间，自动停止");
                     break;
                 }
-            } else if let Ok(end_t) = DateTime::parse_from_str(end, "%Y-%m-%d %H:%M:%S") {
-                if Utc::now() > end_t.with_timezone(&Utc) {
-                    tracing::info!(task_id, "任务已过结束时间，自动停止");
-                    break;
-                }
+            } else if let Ok(end_t) = DateTime::parse_from_str(end, "%Y-%m-%d %H:%M:%S")
+                && Utc::now() > end_t.with_timezone(&Utc)
+            {
+                tracing::info!(task_id, "任务已过结束时间，自动停止");
+                break;
             }
         }
 
@@ -333,7 +322,9 @@ async fn run_loop(
             tracing::error!(task_id, error = %e, "任务执行失败");
         }
         let sched = Scheduler { db: db.clone() };
-        sched.record(task_id.parse().unwrap_or(0), &result, "调度执行").await;
+        sched
+            .record(task_id.parse().unwrap_or(0), &result, "调度执行")
+            .await;
         executed += 1;
 
         // 更新 nextRunTime

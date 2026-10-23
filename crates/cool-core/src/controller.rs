@@ -5,7 +5,7 @@
 
 use crate::error::CoolError;
 use crate::query::{ListReq, PageReq};
-use crate::response::{ok, BaseRes};
+use crate::response::{BaseRes, ok};
 use crate::service::CrudService;
 use axum::extract::{Query, State};
 use axum::routing::{get, post};
@@ -169,11 +169,7 @@ async fn handle_delete<S: CrudState>(
     let ids: Vec<i64> = body
         .get("ids")
         .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|x| x.as_i64())
-                .collect()
-        })
+        .map(|arr| arr.iter().filter_map(|x| x.as_i64()).collect())
         .unwrap_or_default();
     match svc.delete(st.db(), &ids).await {
         Ok(data) => Json(ok(data)),
@@ -233,11 +229,11 @@ async fn handle_page<S: CrudState>(
         size: m.get("size").and_then(|v| v.as_i64()).unwrap_or(15),
         order: m.get("order").and_then(|v| v.as_str()).map(String::from),
         sort: m.get("sort").and_then(|v| v.as_str()).map(String::from),
-        is_export: m
-            .get("isExport")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false),
-        max_export_limit: m.get("maxExportLimit").and_then(|v| v.as_i64()).unwrap_or(0),
+        is_export: m.get("isExport").and_then(|v| v.as_bool()).unwrap_or(false),
+        max_export_limit: m
+            .get("maxExportLimit")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0),
     };
     match svc.page(st.db(), &req, &m).await {
         Ok(data) => Json(ok(data)),

@@ -1583,9 +1583,11 @@ name = "mod-demo"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "cool-cache",
  "cool-core",
  "cool-db",
  "serde_json",
+ "tracing",
 ]
 
 [[package]]
@@ -1593,10 +1595,12 @@ name = "mod-dict"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "cool-cache",
  "cool-core",
  "cool-db",
  "serde",
  "serde_json",
+ "tracing",
 ]
 
 [[package]]
@@ -1604,9 +1608,11 @@ name = "mod-space"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "cool-cache",
  "cool-core",
  "cool-db",
  "serde_json",
+ "tracing",
 ]
 
 [[package]]
@@ -1615,6 +1621,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "chrono",
+ "cool-cache",
  "cool-core",
  "cool-db",
  "cron",
@@ -1628,6 +1635,8 @@ dependencies = [
 name = "modules"
 version = "0.1.0"
 dependencies = [
+ "axum",
+ "cool-auth",
  "cool-cache",
  "cool-core",
  "cool-db",
@@ -1636,6 +1645,9 @@ dependencies = [
  "mod-dict",
  "mod-space",
  "mod-task",
+ "sa-token-plugin-axum",
+ "tower-http",
+ "tracing",
 ]
 
 [[package]]

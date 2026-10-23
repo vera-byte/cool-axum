@@ -16,7 +16,7 @@ pub trait ModelMeta {
 }
 
 /// 基础模型字段（对齐 cool-admin-go cool.Model）
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Model {
     pub id: u64,
     /// 创建时间
@@ -25,17 +25,6 @@ pub struct Model {
     pub update_time: Option<DateTime<Utc>>,
     /// 软删除时间（null 表示未删除）
     pub delete_time: Option<DateTime<Utc>>,
-}
-
-impl Default for Model {
-    fn default() -> Self {
-        Self {
-            id: 0,
-            create_time: None,
-            update_time: None,
-            delete_time: None,
-        }
-    }
 }
 
 impl Model {

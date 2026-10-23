@@ -47,20 +47,18 @@ impl CacheManager {
     pub async fn new_redis(url: &str) -> Self {
         let client = redis::Client::open(url);
         match client {
-            Ok(c) => {
-                match redis::aio::ConnectionManager::new(c).await {
-                    Ok(cm) => {
-                        tracing::info!(url, "CacheManager 使用 Redis（多节点共享）");
-                        Self {
-                            backend: std::sync::Arc::new(Backend::Redis(cm)),
-                        }
-                    }
-                    Err(e) => {
-                        tracing::error!(error = %e, "CacheManager Redis 连接失败，回退内存");
-                        Self::new_memory()
+            Ok(c) => match redis::aio::ConnectionManager::new(c).await {
+                Ok(cm) => {
+                    tracing::info!(url, "CacheManager 使用 Redis（多节点共享）");
+                    Self {
+                        backend: std::sync::Arc::new(Backend::Redis(cm)),
                     }
                 }
-            }
+                Err(e) => {
+                    tracing::error!(error = %e, "CacheManager Redis 连接失败，回退内存");
+                    Self::new_memory()
+                }
+            },
             Err(e) => {
                 tracing::error!(error = %e, "CacheManager Redis 配置错误，回退内存");
                 Self::new_memory()
@@ -79,11 +77,11 @@ impl CacheManager {
             Backend::Memory(map) => {
                 let mut map = map.lock().unwrap();
                 if let Some(entry) = map.get(key) {
-                    if let Some(exp) = entry.expire_at {
-                        if Instant::now() >= exp {
-                            map.remove(key);
-                            return None;
-                        }
+                    if let Some(exp) = entry.expire_at
+                        && Instant::now() >= exp
+                    {
+                        map.remove(key);
+                        return None;
                     }
                     return Some(entry.value.clone());
                 }
@@ -111,13 +109,9 @@ impl CacheManager {
                 } else {
                     Some(Instant::now() + ttl)
                 };
-                map.lock().unwrap().insert(
-                    key.to_string(),
-                    MemEntry {
-                        value,
-                        expire_at,
-                    },
-                );
+                map.lock()
+                    .unwrap()
+                    .insert(key.to_string(), MemEntry { value, expire_at });
                 Ok(())
             }
             Backend::Redis(cm) => {
@@ -174,12 +168,7 @@ impl CacheManager {
     }
 
     /// 取值，缺失时用 `f` 生成并写入（对齐 MustGetOrSet）
-    pub async fn get_or_set(
-        &self,
-        key: &str,
-        ttl: Duration,
-        f: impl FnOnce() -> Value,
-    ) -> Value {
+    pub async fn get_or_set(&self, key: &str, ttl: Duration, f: impl FnOnce() -> Value) -> Value {
         if let Some(v) = self.get(key).await {
             return v;
         }
@@ -198,21 +187,13 @@ impl CacheManager {
                 let now = Instant::now();
                 let entry = map.entry(key.to_string()).or_insert_with(|| MemEntry {
                     value: Value::from(0u64),
-                    expire_at: if ttl.is_zero() {
-                        None
-                    } else {
-                        Some(now + ttl)
-                    }
+                    expire_at: if ttl.is_zero() { None } else { Some(now + ttl) },
                 });
-                if let Some(exp) = entry.expire_at {
-                    if now >= exp {
-                        entry.value = Value::from(0u64);
-                        entry.expire_at = if ttl.is_zero() {
-                            None
-                        } else {
-                            Some(now + ttl)
-                        };
-                    }
+                if let Some(exp) = entry.expire_at
+                    && now >= exp
+                {
+                    entry.value = Value::from(0u64);
+                    entry.expire_at = if ttl.is_zero() { None } else { Some(now + ttl) };
                 }
                 let n = entry.value.as_u64().unwrap_or(0) + 1;
                 entry.value = Value::from(n);

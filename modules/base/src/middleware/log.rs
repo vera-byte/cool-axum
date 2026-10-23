@@ -45,7 +45,11 @@ pub async fn request_log(req: Request, next: Next) -> Response {
     if should_record(&path) {
         let action = format!("{method}:{path}");
         let params = build_params(&query, &headers);
-        let ip = if ip_ext.is_empty() { client_ip(&headers) } else { ip_ext };
+        let ip = if ip_ext.is_empty() {
+            client_ip(&headers)
+        } else {
+            ip_ext
+        };
         if let Some(db) = DB.get().cloned() {
             tokio::spawn(async move {
                 let uid = resolve_user_id(&headers).await.unwrap_or(0);
@@ -56,10 +60,10 @@ pub async fn request_log(req: Request, next: Next) -> Response {
                     "INSERT INTO `base_sys_log` (createTime, updateTime, userId, action, ip, ipAddr, params) \
                      VALUES (CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, {uid}, '{action_esc}', '{ip_esc}', '{ip_esc}', '{params_esc}')"
                 );
-                if let Ok(pool) = db.default_pool() {
-                    if let Err(e) = pool.execute(&sql).await {
-                        tracing::error!(error = %e, "操作日志写入失败");
-                    }
+                if let Ok(pool) = db.default_pool()
+                    && let Err(e) = pool.execute(&sql).await
+                {
+                    tracing::error!(error = %e, "操作日志写入失败");
                 }
             });
         }
@@ -125,7 +129,10 @@ fn truncate(s: &str, max: usize) -> String {
 
 fn client_ip_from_ext(req_parts: &axum::http::request::Parts) -> String {
     use axum::extract::ConnectInfo;
-    if let Some(ConnectInfo(addr)) = req_parts.extensions.get::<ConnectInfo<std::net::SocketAddr>>() {
+    if let Some(ConnectInfo(addr)) = req_parts
+        .extensions
+        .get::<ConnectInfo<std::net::SocketAddr>>()
+    {
         return addr.ip().to_string();
     }
     String::new()
@@ -137,10 +144,9 @@ fn client_ip(headers: &HeaderMap) -> String {
         .and_then(|v| v.to_str().ok())
         .and_then(|s| s.split(',').next())
         .map(|s| s.trim().to_string())
+        && !xff.is_empty()
     {
-        if !xff.is_empty() {
-            return xff;
-        }
+        return xff;
     }
     headers
         .get("x-real-ip")

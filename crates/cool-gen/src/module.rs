@@ -16,7 +16,7 @@
 //!     └── utils/mod.rs
 //! ```
 
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use std::path::{Path, PathBuf};
 
 pub fn create_module(name: &str) -> anyhow::Result<()> {
@@ -41,8 +41,7 @@ pub fn create_module(name: &str) -> anyhow::Result<()> {
         "src/utils",
         "initjson",
     ] {
-        std::fs::create_dir_all(module_dir.join(d))
-            .with_context(|| format!("创建目录 {d}"))?;
+        std::fs::create_dir_all(module_dir.join(d)).with_context(|| format!("创建目录 {d}"))?;
     }
 
     let crate_name = format!("mod-{}", name.replace('_', "-"));
@@ -371,17 +370,15 @@ pub fn routes<S: CrudState>() -> Router<S> {{
     write(
         &module_dir,
         "src/controller/app/mod.rs",
-        &format!(
-            r#"//! controller/app：移动端控制器（按需补充）
+        r#"//! controller/app：移动端控制器（按需补充）
 
 use axum::Router;
 use cool_core::CrudState;
 
-pub fn routes<S: CrudState>() -> Router<S> {{
+pub fn routes<S: CrudState>() -> Router<S> {
     Router::new()
-}}
-"#
-        ),
+}
+"#,
     )?;
 
     // ── middleware / funcs / utils ─────────────────────────────
@@ -414,15 +411,13 @@ pub async fn {name}_demo_func(param: &str) -> Result<(), String> {{
     write(
         &module_dir,
         "src/utils/mod.rs",
-        &format!(
-            r#"//! utils：工具函数
+        r#"//! utils：工具函数
 
 /// SQL 值转义
-pub fn escape_sql(s: &str) -> String {{
+pub fn escape_sql(s: &str) -> String {
     s.replace('\'', "''")
-}}
-"#
-        ),
+}
+"#,
     )?;
 
     println!("创建模块成功: {}", module_dir.display());
@@ -443,7 +438,9 @@ pub fn escape_sql(s: &str) -> String {{
     println!();
     println!("后续步骤：");
     println!("  1. 将 `{crate_name}` 加入 workspace Cargo.toml [members] 与 [dependencies]");
-    println!("  2. 挂载路由：mod_{name}::routes()（protected）/ mod_{name}::open_routes()（public）");
+    println!(
+        "  2. 挂载路由：mod_{name}::routes()（protected）/ mod_{name}::open_routes()（public）"
+    );
     println!("  3. autoMigrate 追加 mod_{name}::all_tables()");
     println!("  4. 用 `cool-gen crud <table> --module {name}` 从数据库表生成真实 CRUD");
     Ok(())
@@ -492,12 +489,11 @@ pub fn find_workspace_root() -> anyhow::Result<PathBuf> {
     let mut dir = std::env::current_dir()?;
     loop {
         let cargo = dir.join("Cargo.toml");
-        if cargo.exists() {
-            if let Ok(content) = std::fs::read_to_string(&cargo) {
-                if content.contains("[workspace]") {
-                    return Ok(dir);
-                }
-            }
+        if cargo.exists()
+            && let Ok(content) = std::fs::read_to_string(&cargo)
+            && content.contains("[workspace]")
+        {
+            return Ok(dir);
         }
         if !dir.pop() {
             bail!("未找到 workspace 根目录（Cargo.toml 含 [workspace]），请在 cool-axum 下执行");

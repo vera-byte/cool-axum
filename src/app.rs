@@ -1,15 +1,17 @@
 //! 应用装配：配置 → 数据源 → sa-token → 路由 → 启动 HTTP 服务
 
-use crate::routes;
 use anyhow::Context;
+use axum::Json;
+use axum::routing::get;
 use cool_auth::AuthState as SaTokenState;
 use cool_cache::CacheManager;
 use cool_config::AppConfig;
 use cool_core::CrudState;
+use cool_core::response::{BaseRes, ok};
 use cool_db::DbManager;
 use cool_file::FileDriver;
-use mod_task::scheduler::Scheduler;
 use mod_task::TaskState;
+use mod_task::scheduler::Scheduler;
 use std::sync::Arc;
 
 /// 全局应用状态
@@ -47,10 +49,9 @@ pub async fn serve(config: AppConfig) -> anyhow::Result<()> {
         .await
         .context("初始化数据库失败")?;
 
-    // autoMigrate + initjson 种子（各模块 spec 声明，modules:: 统一执行）
+    // autoMigrate（各模块 spec 声明业务表）
     if config.cool.auto_migrate {
         auto_migrate(&db).await;
-        seed_init_data(&db).await;
     }
 
     // 任务调度器
@@ -68,12 +69,12 @@ pub async fn serve(config: AppConfig) -> anyhow::Result<()> {
     }
 
     // sa-token：有 redis.cool 配置则用 Redis 会话（多节点共享），否则内存
-    let redis_url = config.cool_redis().map(|r| {
-        match r.password.as_deref().unwrap_or("") {
+    let redis_url = config
+        .cool_redis()
+        .map(|r| match r.password.as_deref().unwrap_or("") {
             "" => format!("redis://{}/{}", r.address, r.db),
             pass => format!("redis://:{}@{}/{}", pass, r.address, r.db),
-        }
-    });
+        });
     let sa = cool_auth::init_sa_token(&config.modules.base.auth, redis_url.as_deref()).await;
 
     // 缓存管理器
@@ -110,7 +111,14 @@ pub async fn serve(config: AppConfig) -> anyhow::Result<()> {
         cache,
     };
 
-    let app = routes::router(state.clone());
+    // 框架级路由（健康检查/服务信息）
+    let extra_open = axum::Router::new()
+        .route("/", get(index))
+        .route("/health", get(health))
+        .route("/base/health", get(health));
+
+    // 业务路由由 modules 注册中心自动装配
+    let app = modules::build_router(state.clone(), state.sa.clone(), extra_open);
 
     let addr = normalize_addr(&config.server.address);
     let listener = tokio::net::TcpListener::bind(&addr)
@@ -163,15 +171,49 @@ async fn auto_migrate(db: &DbManager) {
     tracing::info!(ok, fail, "autoMigrate 完成");
 }
 
-/// initjson 种子数据（由各模块 spec 声明）
-///
-/// 落库分组固定 `default`（对齐 cool-admin-go model.GroupName()），
-/// 模块名仅用于日志/账目可读性。
-async fn seed_init_data(db: &DbManager) {
-    for (module, table, raw) in modules::all_seeds() {
-        match cool_db::fill_init_data(db, "default", table, raw).await {
-            Ok(n) => tracing::debug!(module, table, inserted = n, "种子数据处理"),
-            Err(e) => tracing::error!(module, table, error = %e, "种子数据填充失败"),
+/// 服务信息
+async fn index(axum::extract::State(state): axum::extract::State<AppState>) -> Json<BaseRes> {
+    Json(ok(serde_json::json!({
+        "name": "cool-axum",
+        "version": env!("CARGO_PKG_VERSION"),
+        "runMode": if state.config.cool.eps { "eps" } else { "normal" },
+        "autoMigrate": state.config.cool.auto_migrate,
+        "docs": "/docs"
+    })))
+}
+
+/// 健康检查：DB + 缓存
+async fn health(axum::extract::State(state): axum::extract::State<AppState>) -> Json<BaseRes> {
+    let mut db_ok = true;
+    let mut detail = serde_json::Map::new();
+
+    match state.db.ping_all().await {
+        Ok(()) => {
+            detail.insert("database".into(), serde_json::json!("up"));
+        }
+        Err(e) => {
+            db_ok = false;
+            detail.insert("database".into(), serde_json::json!(format!("down: {e}")));
         }
     }
+    detail.insert("pools".into(), serde_json::json!(state.db.pool_count()));
+    detail.insert(
+        "cache".into(),
+        serde_json::json!(if state.cache.is_redis_mode() {
+            "redis"
+        } else {
+            "memory"
+        }),
+    );
+
+    let code = if db_ok {
+        cool_core::response::CODE_OK
+    } else {
+        cool_core::response::CODE_SERVER
+    };
+    Json(BaseRes::new(
+        code,
+        if db_ok { "success" } else { "degraded" },
+        Some(serde_json::Value::Object(detail)),
+    ))
 }

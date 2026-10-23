@@ -14,7 +14,11 @@ pub async fn get_by_role_ids(db: &DbManager, role_ids: &[i64], is_admin: bool) -
     if role_ids.is_empty() {
         return Vec::new();
     }
-    let ids = role_ids.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(",");
+    let ids = role_ids
+        .iter()
+        .map(|i| i.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
     let sql = format!(
         "SELECT DISTINCT departmentId FROM `base_sys_role_department` \
          WHERE roleId IN ({ids}) AND deleteTime IS NULL"

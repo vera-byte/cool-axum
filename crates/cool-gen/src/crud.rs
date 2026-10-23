@@ -7,7 +7,7 @@
 //!
 //! 生成的代码风格对齐手写模块（mod-demo / mod-dict）。
 
-use crate::schema::{describe_table, ColumnInfo};
+use crate::schema::{ColumnInfo, describe_table};
 use anyhow::Context;
 use cool_db::DbManager;
 use std::fmt::Write as _;
@@ -47,10 +47,7 @@ pub async fn generate_crud(db: &DbManager, table: &str, module: &str) -> anyhow:
 /// 生成 tables.rs（TableDef）
 fn render_tables(table: &str, columns: &[ColumnInfo]) -> String {
     let mut out = String::new();
-    let _ = writeln!(
-        out,
-        "//! `{table}` 表结构（由 cool-gen 自动生成）\n"
-    );
+    let _ = writeln!(out, "//! `{table}` 表结构（由 cool-gen 自动生成）\n");
     out.push_str("use cool_db::{ColumnMeta, TableDef};\n\n");
 
     // 判断是否有基础列
@@ -63,7 +60,9 @@ fn render_tables(table: &str, columns: &[ColumnInfo]) -> String {
         || names.contains(&"deleted_at")
         || names.contains(&"deletedAt");
 
-    out.push_str("fn col(name: &str, sql_type: &str, not_null: bool, comment: &str) -> ColumnMeta {\n");
+    out.push_str(
+        "fn col(name: &str, sql_type: &str, not_null: bool, comment: &str) -> ColumnMeta {\n",
+    );
     out.push_str("    ColumnMeta {\n");
     out.push_str("        name: name.into(),\n");
     out.push_str("        sql_type: sql_type.into(),\n");
@@ -155,7 +154,10 @@ fn render_lib(table: &str, module: &str, columns: &[ColumnInfo]) -> String {
         .filter(|c| {
             let t = c.column_type.to_lowercase();
             (t.contains("int") || t.starts_with("tinyint") || t.starts_with("varchar"))
-                && !matches!(c.name.as_str(), "password" | "createTime" | "updateTime" | "deleteTime")
+                && !matches!(
+                    c.name.as_str(),
+                    "password" | "createTime" | "updateTime" | "deleteTime"
+                )
         })
         .map(|c| format!("\"{}\"", normalize_col_name(&c.name)))
         .take(4)
@@ -178,7 +180,10 @@ fn render_lib(table: &str, module: &str, columns: &[ColumnInfo]) -> String {
     out.push_str("use axum::Router;\n\n");
 
     let _ = writeln!(out, "/// 注册 {table} 路由");
-    let _ = writeln!(out, "pub fn routes_{table}() -> Router<S> where S: cool_core::CrudState {{");
+    let _ = writeln!(
+        out,
+        "pub fn routes_{table}() -> Router<S> where S: cool_core::CrudState {{"
+    );
     let _ = writeln!(out, "    let svc = CrudService::new(\"{table}\")");
     if !eq_fields.is_empty() {
         let _ = writeln!(
@@ -205,7 +210,10 @@ fn render_lib(table: &str, module: &str, columns: &[ColumnInfo]) -> String {
         out.push_str("        .list_op(QueryOp::new())\n");
         out.push_str("        .page_op(QueryOp::new().add_orderby(\"id\", \"desc\"));\n");
     }
-    let _ = writeln!(out, "    crud_router(\"/{module}/{table}\", svc, ApiAllow::default())");
+    let _ = writeln!(
+        out,
+        "    crud_router(\"/{module}/{table}\", svc, ApiAllow::default())"
+    );
     out.push_str("}\n");
     out
 }

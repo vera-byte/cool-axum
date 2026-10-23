@@ -3,7 +3,7 @@
 //! 兼容前端多种传参方式，保证 sa-token 层（token_name=Authorization）能取到。
 
 use axum::extract::Request;
-use axum::http::{header, HeaderValue};
+use axum::http::{HeaderValue, header};
 use axum::middleware::Next;
 use axum::response::Response;
 
@@ -38,18 +38,20 @@ pub async fn normalize_token_header(mut req: Request, next: Next) -> Response {
                         let mut kv = part.trim().splitn(2, '=');
                         let k = kv.next().unwrap_or("");
                         let v = kv.next().unwrap_or("");
-                        if matches!(k, "satoken" | "sa-token" | "token" | "Authorization" | "authorization")
-                            && !v.is_empty()
+                        if matches!(
+                            k,
+                            "satoken" | "sa-token" | "token" | "Authorization" | "authorization"
+                        ) && !v.is_empty()
                         {
                             return Some(v.to_string());
                         }
                     }
                     None
                 });
-            if let Some(v) = from_cookie {
-                if let Ok(hv) = HeaderValue::from_str(&v) {
-                    req.headers_mut().insert(header::AUTHORIZATION, hv);
-                }
+            if let Some(v) = from_cookie
+                && let Ok(hv) = HeaderValue::from_str(&v)
+            {
+                req.headers_mut().insert(header::AUTHORIZATION, hv);
             }
         }
     }

@@ -2,7 +2,7 @@
 
 use cool_core::service::query_rows_on;
 use cool_db::DbManager;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 /// Data：获得字典数据（对齐 DictInfoService.Data）
 ///
@@ -13,16 +13,16 @@ pub async fn data(db: &DbManager, types: Option<Vec<String>>) -> Result<Value, S
 
     // 查询 dict_type
     let mut type_sql = "SELECT id, `key` FROM `dict_type` WHERE deleteTime IS NULL".to_string();
-    if let Some(types) = types {
-        if !types.is_empty() {
-            let list = types
-                .iter()
-                .map(|k| format!("'{}'", k.replace('\'', "''")))
-                .collect::<Vec<_>>()
-                .join(",");
-            // 对齐 Go 语义：按标识 key 过滤（Go 误写 type）
-            type_sql.push_str(&format!(" AND `key` IN ({list})"));
-        }
+    if let Some(types) = types
+        && !types.is_empty()
+    {
+        let list = types
+            .iter()
+            .map(|k| format!("'{}'", k.replace('\'', "''")))
+            .collect::<Vec<_>>()
+            .join(",");
+        // 对齐 Go 语义：按标识 key 过滤（Go 误写 type）
+        type_sql.push_str(&format!(" AND `key` IN ({list})"));
     }
     let type_rows = query_rows_on(pool, &type_sql)
         .await
@@ -43,9 +43,7 @@ pub async fn data(db: &DbManager, types: Option<Vec<String>>) -> Result<Value, S
             "SELECT id, name, parentId, typeId FROM `dict_info` \
              WHERE typeId = {id} AND deleteTime IS NULL ORDER BY orderNum ASC"
         );
-        let result = query_rows_on(pool, &sql)
-            .await
-            .map_err(|e| e.to_string())?;
+        let result = query_rows_on(pool, &sql).await.map_err(|e| e.to_string())?;
         if result.is_empty() {
             continue;
         }

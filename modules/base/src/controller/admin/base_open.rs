@@ -6,8 +6,8 @@ use axum::extract::{ConnectInfo, Query, State};
 use axum::http::HeaderMap;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use cool_core::response::{fail, ok, BaseRes};
 use cool_core::CrudState;
+use cool_core::response::{BaseRes, fail, ok};
 use serde_json::json;
 use std::net::SocketAddr;
 
@@ -21,6 +21,9 @@ pub fn routes<S: CrudState + FileState>() -> Router<S> {
         .route("/admin/base/open/captcha", get(captcha_handler::<S>))
         .route("/base/open/captcha", get(captcha_handler::<S>))
         .route("/admin/base/open/login", post(login_handler::<S>))
+        .route("/base/login", post(login_handler::<S>))
+        .route("/admin/base/open/logout", post(logout_handler))
+        .route("/base/logout", post(logout_handler))
         .route("/admin/base/open/eps", get(eps_handler::<S>))
 }
 
@@ -69,12 +72,21 @@ async fn login_handler<S: CrudState + FileState>(
     }
 }
 
+/// POST /base/logout、/admin/base/open/logout
+async fn logout_handler(headers: HeaderMap) -> Json<BaseRes> {
+    if let Some(token) = token_from_headers(&headers)
+        && let Some(login_id) = cool_auth::get_login_id(&token).await
+    {
+        let _ = cool_auth::logout_by_login_id(&login_id).await;
+    }
+    Json(ok(serde_json::json!({})))
+}
+
 async fn eps_handler<S: CrudState + FileState>(State(st): State<S>) -> Json<BaseRes> {
     Json(ok(base_open::admin_eps(CrudState::db(&st)).await))
 }
 
-/// 兼容：从 header 取 token（供其它 handler 使用）
-#[allow(dead_code)]
+/// 从 header 取 token
 pub fn token_from_headers(headers: &HeaderMap) -> Option<String> {
     let raw = headers
         .get("authorization")

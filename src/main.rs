@@ -1,7 +1,6 @@
 //! cool-axum 入口：对齐 cool-admin-go 的 main.go / internal/cmd
 
 mod app;
-mod routes;
 
 use anyhow::Context;
 use cool_config::AppConfig;
@@ -10,8 +9,7 @@ use tracing_subscriber::EnvFilter;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // 配置路径：环境变量 COOL_CONFIG 或默认 config.yaml
-    let config_path =
-        std::env::var("COOL_CONFIG").unwrap_or_else(|_| "config.yaml".to_string());
+    let config_path = std::env::var("COOL_CONFIG").unwrap_or_else(|_| "config.yaml".to_string());
 
     let config = AppConfig::load(&config_path)
         .with_context(|| format!("加载配置文件失败: {config_path}"))?;

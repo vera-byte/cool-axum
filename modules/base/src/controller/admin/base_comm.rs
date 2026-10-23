@@ -4,12 +4,12 @@
 
 use axum::extract::{Multipart, State};
 use axum::http::HeaderMap;
-use axum::routing::{get, post};
-use axum::{Json, Router};
-use cool_core::response::{fail, ok, BaseRes};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use axum::routing::{get, post};
+use axum::{Json, Router};
 use cool_core::CrudState;
+use cool_core::response::{BaseRes, fail, ok};
 use cool_file::FileDriver;
 
 use crate::middleware::authority::login_id_from_headers;
@@ -37,6 +37,8 @@ pub fn routes<S: CrudState + FileState>() -> Router<S> {
         .route("/base/comm/permmenu", get(permmenu::<S>))
         .route("/base/comm/refreshPerms", post(refresh_perms::<S>))
         .route("/base/comm/person", get(person::<S>))
+        .route("/base/userinfo", get(person::<S>))
+        .route("/admin/base/comm/userinfo", get(person::<S>))
         .route("/admin/base/comm/uploadMode", get(upload_mode::<S>))
         .route("/admin/base/comm/upload", post(upload::<S>))
         .route("/admin/base/comm/permmenu", get(permmenu::<S>))
@@ -45,10 +47,7 @@ pub fn routes<S: CrudState + FileState>() -> Router<S> {
 }
 
 /// GET .../person —— 当前登录人信息
-async fn person<S: CrudState + FileState>(
-    State(st): State<S>,
-    headers: HeaderMap,
-) -> Response {
+async fn person<S: CrudState + FileState>(State(st): State<S>, headers: HeaderMap) -> Response {
     let Some(login_id) = login_id_from_headers(&headers).await else {
         return unauthorized();
     };
@@ -60,10 +59,7 @@ async fn person<S: CrudState + FileState>(
 }
 
 /// GET .../permmenu —— 权限点 + 菜单树
-async fn permmenu<S: CrudState + FileState>(
-    State(st): State<S>,
-    headers: HeaderMap,
-) -> Response {
+async fn permmenu<S: CrudState + FileState>(State(st): State<S>, headers: HeaderMap) -> Response {
     let Some(login_id) = login_id_from_headers(&headers).await else {
         return unauthorized();
     };
@@ -91,7 +87,10 @@ async fn upload_mode<S: CrudState + FileState>(State(st): State<S>) -> Json<Base
 }
 
 /// POST .../upload —— multipart 字段名 `file`
-async fn upload<S: CrudState + FileState>(State(st): State<S>, mut multipart: Multipart) -> Json<BaseRes> {
+async fn upload<S: CrudState + FileState>(
+    State(st): State<S>,
+    mut multipart: Multipart,
+) -> Json<BaseRes> {
     let mut filename = String::from("file.bin");
     let mut data: Option<Vec<u8>> = None;
 

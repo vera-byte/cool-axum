@@ -138,7 +138,13 @@ pub fn base_sys_param() -> TableDef {
             col("keyName", "varchar(255)", true, false, "键位"),
             col("name", "varchar(255)", true, false, "名称"),
             col("data", "text", true, false, "数据"),
-            col("dataType", "int", true, false, "数据类型 0字符串 1数组 2键值对"),
+            col(
+                "dataType",
+                "int",
+                true,
+                false,
+                "数据类型 0字符串 1数组 2键值对",
+            ),
             col("remark", "varchar(255)", false, false, "备注"),
         ],
     )

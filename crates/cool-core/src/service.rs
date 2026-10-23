@@ -6,7 +6,12 @@ use crate::error::CoolError;
 use crate::query::{ListReq, PageReq, QueryOp};
 use crate::sql::SqlBuilder;
 use cool_db::{DbManager, DbPool};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
+
+/// 写入前变换（密码哈希等）
+pub type TransformFn = fn(&mut Map<String, Value>, /*is_update*/ bool) -> Result<(), String>;
+/// 更新后回调，返回补充 SQL
+pub type AfterUpdateFn = fn(i64, &Map<String, Value>) -> Option<String>;
 
 /// CRUD 服务配置
 #[derive(Clone)]
@@ -22,9 +27,9 @@ pub struct CrudService {
     /// 新增时强制写入的参数（如 userId）
     pub insert_param: Option<fn() -> Map<String, Value>>,
     /// 写入前变换数据（add/update 通用）：返回 Err 中止写入
-    pub transform_data: Option<fn(&mut Map<String, Value>, /*is_update*/ bool) -> Result<(), String>>,
+    pub transform_data: Option<TransformFn>,
     /// 更新后回调（如 passwordV 递增、会话吊销）
-    pub after_update: Option<fn(i64, &Map<String, Value>) -> Option<String>>, // 返回额外 SQL
+    pub after_update: Option<AfterUpdateFn>,
     /// 唯一键校验：字段名 -> 错误信息
     pub unique_keys: Vec<(String, String)>,
     /// 非空校验：字段名 -> 错误信息
@@ -76,7 +81,8 @@ impl CrudService {
     }
 
     pub fn not_null_key(mut self, field: &str, msg: &str) -> Self {
-        self.not_null_keys.push((field.to_string(), msg.to_string()));
+        self.not_null_keys
+            .push((field.to_string(), msg.to_string()));
         self
     }
 
@@ -117,7 +123,9 @@ impl CrudService {
                 }
                 Value::Object(m)
             }
-            Value::Array(arr) => Value::Array(arr.into_iter().map(|x| self.strip_hidden(x)).collect()),
+            Value::Array(arr) => {
+                Value::Array(arr.into_iter().map(|x| self.strip_hidden(x)).collect())
+            }
             other => other,
         }
     }
@@ -140,15 +148,15 @@ impl CrudService {
         }
         // 唯一键校验
         for (field, msg) in &self.unique_keys {
-            if let Some(v) = data.get(field) {
-                if !v.is_null() {
-                    let b = SqlBuilder::new(&self.table)
-                        .soft_delete_col(Some(&self.soft_delete_col))
-                        .eq(field, v.clone());
-                    let n = self.count_sql(db, &b.build_count()).await?;
-                    if n > 0 {
-                        return Err(CoolError::biz(msg.clone()));
-                    }
+            if let Some(v) = data.get(field)
+                && !v.is_null()
+            {
+                let b = SqlBuilder::new(&self.table)
+                    .soft_delete_col(Some(&self.soft_delete_col))
+                    .eq(field, v.clone());
+                let n = self.count_sql(db, &b.build_count()).await?;
+                if n > 0 {
+                    return Err(CoolError::biz(msg.clone()));
                 }
             }
         }
@@ -165,7 +173,9 @@ impl CrudService {
         }
 
         // 自动填充创建/更新时间（对齐 gorm autoCreateTime/autoUpdateTime）
-        let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string();
+        let now = chrono::Utc::now()
+            .format("%Y-%m-%d %H:%M:%S%.3f")
+            .to_string();
         data.entry("createTime".to_string())
             .or_insert_with(|| json!(now));
         data.entry("updateTime".to_string())
@@ -185,8 +195,7 @@ impl CrudService {
         if ids.is_empty() {
             return Err(CoolError::param("请选择要删除的数据"));
         }
-        let Some(sql) =
-            SqlBuilder::build_soft_delete(&self.table, ids, &self.soft_delete_col)
+        let Some(sql) = SqlBuilder::build_soft_delete(&self.table, ids, &self.soft_delete_col)
         else {
             return Err(CoolError::param("请选择要删除的数据"));
         };
@@ -207,16 +216,16 @@ impl CrudService {
 
         // 唯一键校验（排除自身）
         for (field, msg) in &self.unique_keys {
-            if let Some(v) = data.get(field) {
-                if !v.is_null() {
-                    let b = SqlBuilder::new(&self.table)
-                        .soft_delete_col(Some(&self.soft_delete_col))
-                        .eq(field, v.clone())
-                        .neq("id", id);
-                    let n = self.count_sql(db, &b.build_count()).await?;
-                    if n > 0 {
-                        return Err(CoolError::biz(msg.clone()));
-                    }
+            if let Some(v) = data.get(field)
+                && !v.is_null()
+            {
+                let b = SqlBuilder::new(&self.table)
+                    .soft_delete_col(Some(&self.soft_delete_col))
+                    .eq(field, v.clone())
+                    .neq("id", id);
+                let n = self.count_sql(db, &b.build_count()).await?;
+                if n > 0 {
+                    return Err(CoolError::biz(msg.clone()));
                 }
             }
         }
@@ -230,22 +239,21 @@ impl CrudService {
         // 自动填充更新时间
         data.insert(
             "updateTime".to_string(),
-            json!(chrono::Utc::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string()),
+            json!(
+                chrono::Utc::now()
+                    .format("%Y-%m-%d %H:%M:%S%.3f")
+                    .to_string()
+            ),
         );
 
-        let sql = SqlBuilder::build_update(
-            &self.table,
-            &data,
-            id,
-            Some(&self.soft_delete_col),
-        );
+        let sql = SqlBuilder::build_update(&self.table, &data, id, Some(&self.soft_delete_col));
         let n = self.pool(db)?.execute(&sql).await?;
 
         // 更新后回调（补 SQL，如 passwordV 递增）
-        if let Some(f) = self.after_update {
-            if let Some(extra) = f(id, &data) {
-                let _ = self.pool(db)?.execute(&extra).await;
-            }
+        if let Some(f) = self.after_update
+            && let Some(extra) = f(id, &data)
+        {
+            let _ = self.pool(db)?.execute(&extra).await;
         }
         Ok(json!({ "rows": n }))
     }
@@ -258,10 +266,10 @@ impl CrudService {
         if !self.info_ignore_property.is_empty() {
             // FieldsEx：全表列无法静态得知，这里用 select * 由调用方在 ModifyResult 处理；
             // 若配置了 list_op.select 则复用
-            if let Some(op) = &self.list_op {
-                if !op.select.is_empty() {
-                    b = b.select_cols(&op.select);
-                }
+            if let Some(op) = &self.list_op
+                && !op.select.is_empty()
+            {
+                b = b.select_cols(&op.select);
             }
         }
         let sql = b.limit(1).build_select();
@@ -282,16 +290,16 @@ impl CrudService {
 
         // 排序：请求优先，否则默认 add_orderby
         let mut ordered = false;
-        if let (Some(order), Some(sort)) = (&req.order, &req.sort) {
-            if let Some(o) = crate::sql::safe_order_by(order, sort) {
-                b = b.raw_where(""); // no-op 保持链式
-                // 通过 order API 再来一次（safe_order_by 已校验）
-                for part in o.split(',') {
-                    let mut it = part.trim().rsplitn(2, ' ');
-                    if let (Some(dir), Some(field)) = (it.next(), it.next()) {
-                        b = b.order(field, dir);
-                        ordered = true;
-                    }
+        if let (Some(order), Some(sort)) = (&req.order, &req.sort)
+            && let Some(o) = crate::sql::safe_order_by(order, sort)
+        {
+            b = b.raw_where(""); // no-op 保持链式
+            // 通过 order API 再来一次（safe_order_by 已校验）
+            for part in o.split(',') {
+                let mut it = part.trim().rsplitn(2, ' ');
+                if let (Some(dir), Some(field)) = (it.next(), it.next()) {
+                    b = b.order(field, dir);
+                    ordered = true;
                 }
             }
         }
@@ -313,7 +321,11 @@ impl CrudService {
         req: &PageReq,
         filters: &Map<String, Value>,
     ) -> Result<Value, CoolError> {
-        let op = self.page_op.clone().or_else(|| self.list_op.clone()).unwrap_or_default();
+        let op = self
+            .page_op
+            .clone()
+            .or_else(|| self.list_op.clone())
+            .unwrap_or_default();
         let mut page = req.page;
         let mut size = req.size;
         if page <= 0 {
@@ -341,18 +353,18 @@ impl CrudService {
         let mut b = self.build_query(&op, filters);
         // 排序
         let mut ordered = false;
-        if let (Some(order), Some(sort)) = (&req.order, &req.sort) {
-            if let Some(o) = crate::sql::safe_order_by(order, sort) {
-                let _ = o;
-                for part in crate::sql::safe_order_by(order, sort)
-                    .unwrap_or_default()
-                    .split(',')
-                {
-                    let mut it = part.trim().rsplitn(2, ' ');
-                    if let (Some(dir), Some(field)) = (it.next(), it.next()) {
-                        b = b.order(field, dir);
-                        ordered = true;
-                    }
+        if let (Some(order), Some(sort)) = (&req.order, &req.sort)
+            && let Some(o) = crate::sql::safe_order_by(order, sort)
+        {
+            let _ = o;
+            for part in crate::sql::safe_order_by(order, sort)
+                .unwrap_or_default()
+                .split(',')
+            {
+                let mut it = part.trim().rsplitn(2, ' ');
+                if let (Some(dir), Some(field)) = (it.next(), it.next()) {
+                    b = b.order(field, dir);
+                    ordered = true;
                 }
             }
         }
@@ -392,23 +404,24 @@ impl CrudService {
 
         // FieldEQ
         for field in &op.field_eq {
-            if let Some(v) = filters.get(field) {
-                if !v.is_null() {
-                    if let Some(s) = v.as_str() {
-                        if s.is_empty() {
-                            continue;
-                        }
-                    }
-                    b = b.eq(field, v.clone());
+            if let Some(v) = filters.get(field)
+                && !v.is_null()
+            {
+                if let Some(s) = v.as_str()
+                    && s.is_empty()
+                {
+                    continue;
                 }
+                b = b.eq(field, v.clone());
             }
         }
 
         // keyWord 模糊搜索
-        if let Some(kw) = filters.get("keyWord").and_then(|v| v.as_str()) {
-            if !kw.is_empty() && !op.key_word_field.is_empty() {
-                b = b.or_like_any(&op.key_word_field, kw);
-            }
+        if let Some(kw) = filters.get("keyWord").and_then(|v| v.as_str())
+            && !kw.is_empty()
+            && !op.key_word_field.is_empty()
+        {
+            b = b.or_like_any(&op.key_word_field, kw);
         }
 
         // 自定义 where
@@ -476,19 +489,21 @@ fn mysql_row_to_json(row: &sqlx::mysql::MySqlRow) -> Value {
         let ti = col.type_info();
         let tn = ti.name();
         let v = match tn {
-            "INT" | "BIGINT" | "SMALLINT" | "TINYINT" | "MEDIUMINT" | "YEAR" => {
-                row.try_get::<i64, _>(name.as_str())
-                    .map(|x| json!(x))
-                    .or_else(|_| row.try_get::<i32, _>(name.as_str()).map(|x| json!(x)))
-                    .unwrap_or(Value::Null)
-            }
+            "INT" | "BIGINT" | "SMALLINT" | "TINYINT" | "MEDIUMINT" | "YEAR" => row
+                .try_get::<i64, _>(name.as_str())
+                .map(|x| json!(x))
+                .or_else(|_| row.try_get::<i32, _>(name.as_str()).map(|x| json!(x)))
+                .unwrap_or(Value::Null),
             "FLOAT" | "DOUBLE" | "DECIMAL" | "NEWDECIMAL" => row
                 .try_get::<f64, _>(name.as_str())
                 .map(|x| json!(x))
                 .unwrap_or(Value::Null),
             "TIMESTAMP" | "DATETIME" | "DATE" => row
                 .try_get::<Option<chrono::NaiveDateTime>, _>(name.as_str())
-                .map(|x| x.map(|d| json!(d.format("%Y-%m-%d %H:%M:%S").to_string())).unwrap_or(Value::Null))
+                .map(|x| {
+                    x.map(|d| json!(d.format("%Y-%m-%d %H:%M:%S").to_string()))
+                        .unwrap_or(Value::Null)
+                })
                 .or_else(|_| {
                     row.try_get::<Option<chrono::NaiveDate>, _>(name.as_str())
                         .map(|x| x.map(|d| json!(d.to_string())).unwrap_or(Value::Null))
@@ -539,7 +554,10 @@ fn pg_row_to_json(row: &sqlx::postgres::PgRow) -> Value {
                 .unwrap_or(Value::Null),
             "TIMESTAMP" | "TIMESTAMPTZ" | "DATE" => row
                 .try_get::<Option<chrono::NaiveDateTime>, _>(name.as_str())
-                .map(|x| x.map(|d| json!(d.format("%Y-%m-%d %H:%M:%S").to_string())).unwrap_or(Value::Null))
+                .map(|x| {
+                    x.map(|d| json!(d.format("%Y-%m-%d %H:%M:%S").to_string()))
+                        .unwrap_or(Value::Null)
+                })
                 .or_else(|_| {
                     row.try_get::<Option<chrono::NaiveDate>, _>(name.as_str())
                         .map(|x| x.map(|d| json!(d.to_string())).unwrap_or(Value::Null))

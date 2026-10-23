@@ -52,7 +52,7 @@ pub async fn list_tables(db: &DbManager) -> anyhow::Result<()> {
     };
 
     println!("共 {} 张表：\n", rows.len());
-    println!("{:<40} {}", "表名", "注释");
+    println!("{:<40} 注释", "表名");
     println!("{}", "-".repeat(60));
     for (name, comment) in rows {
         println!("{name:<40} {comment}");

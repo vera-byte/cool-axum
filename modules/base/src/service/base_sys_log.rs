@@ -23,6 +23,10 @@ pub async fn count(db: &DbManager) -> i64 {
     query_rows_on(pool, sql)
         .await
         .ok()
-        .and_then(|rows| rows.first().and_then(|r| r.get("count")).and_then(|v| v.as_i64()))
+        .and_then(|rows| {
+            rows.first()
+                .and_then(|r| r.get("count"))
+                .and_then(|v| v.as_i64())
+        })
         .unwrap_or(0)
 }

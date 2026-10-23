@@ -34,15 +34,34 @@ pub fn open_routes<S: CrudState>() -> Router<S> {
 // 兼容旧路径
 pub use model::initjson;
 
-/// 模块注册声明（对齐 dict/dict.go init）
+/// 模块注册声明：业务表
 pub fn spec() -> cool_core::ModuleSpec {
-    cool_core::ModuleSpec::new("dict")
-        .tables(all_tables())
-        .seeds(vec![
-            ("dict_type", initjson::DICT_TYPE),
-            ("dict_info", initjson::DICT_INFO),
-        ])
+    cool_core::ModuleSpec::new("dict").tables(all_tables())
 }
 
-/// 模块启动钩子
-pub async fn init(_db: &cool_db::DbManager) {}
+/// 模块初始化（对齐 dict/dict.go init()）
+pub async fn init(db: &cool_db::DbManager, _cache: cool_cache::CacheManager) {
+    tracing::debug!("module dict init start ...");
+
+    for (table, raw) in [
+        ("dict_type", initjson::DICT_TYPE),
+        ("dict_info", initjson::DICT_INFO),
+    ] {
+        match cool_db::fill_init_data(db, "default", table, raw).await {
+            Ok(n) => tracing::debug!(table, inserted = n, "FillInitData"),
+            Err(e) => tracing::error!(table, error = %e, "FillInitData 失败"),
+        }
+    }
+
+    tracing::debug!("module dict init finished ...");
+}
+
+/// 路由分组
+pub fn route_groups<S>() -> cool_core::RouteGroups<S>
+where
+    S: cool_core::CrudState + Clone + Send + Sync + 'static,
+{
+    cool_core::RouteGroups::new()
+        .open(open_routes::<S>())
+        .biz(routes::<S>())
+}

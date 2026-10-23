@@ -6,18 +6,18 @@
 
 pub mod controller;
 pub mod error;
-pub mod module;
 pub mod model;
+pub mod module;
 pub mod query;
 pub mod response;
 pub mod service;
 pub mod sql;
 
-pub use controller::{crud_router, ApiAllow, CrudState};
+pub use controller::{ApiAllow, CrudState, crud_router};
 pub use error::CoolError;
-pub use module::ModuleSpec;
 pub use model::{Model, ModelMeta};
+pub use module::{ModuleSpec, RouteGroups};
 pub use query::{JoinOp, JoinType, ListReq, PageReq, QueryOp};
-pub use response::{fail, ok, BaseRes};
+pub use response::{BaseRes, fail, ok};
 pub use service::CrudService;
-pub use sql::{safe_order_by, SqlBuilder};
+pub use sql::{SqlBuilder, safe_order_by};

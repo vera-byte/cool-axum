@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 cool-core = { workspace = true }
 cool-db = { workspace = true }
+cool-cache = { workspace = true }
 axum = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

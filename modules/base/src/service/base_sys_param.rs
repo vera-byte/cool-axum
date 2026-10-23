@@ -22,10 +22,10 @@ fn cache() -> Option<&'static CacheManager> {
 /// 读取系统参数（缓存优先）
 pub async fn get_param(db: &DbManager, key: &str) -> Option<String> {
     let rkey = format!("{PARAM_PREFIX}{key}");
-    if let Some(c) = cache() {
-        if let Some(v) = c.get(&rkey).await {
-            return v.as_str().map(String::from);
-        }
+    if let Some(c) = cache()
+        && let Some(v) = c.get(&rkey).await
+    {
+        return v.as_str().map(String::from);
     }
 
     let pool = db.default_pool().ok()?;

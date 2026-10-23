@@ -38,7 +38,7 @@ pub fn routes<S: CrudState + FileState>() -> Router<S> {
 
 mod relations {
     use axum::Router;
-    use cool_core::controller::{crud_router, ApiAllow};
+    use cool_core::controller::{ApiAllow, crud_router};
     use cool_core::service::CrudService;
     use cool_core::{CrudState, QueryOp};
 

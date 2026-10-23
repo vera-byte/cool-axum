@@ -11,7 +11,7 @@
 
 use axum::body::Body;
 use axum::extract::Request;
-use axum::http::{header, HeaderMap, StatusCode};
+use axum::http::{HeaderMap, StatusCode, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use cool_core::response::{BaseRes, CODE_FORBIDDEN};
@@ -36,7 +36,9 @@ fn is_comm_path(path: &str) -> bool {
     }
     // /admin/xxx/comm/yyy 或 /app/xxx/comm/yyy
     let segs: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
-    segs.len() >= 3 && (segs[0] == "admin" || segs[0] == "app" || segs[0] == "base") && segs[2] == "comm"
+    segs.len() >= 3
+        && (segs[0] == "admin" || segs[0] == "app" || segs[0] == "base")
+        && segs[2] == "comm"
 }
 
 /// 公开路径（无需登录，防御性保留——外层已有 token 层放行）
@@ -55,10 +57,7 @@ const OPEN_PREFIXES: &[&str] = &[
 /// `/base/sys/menu/add` → `base:sys:menu:add`
 pub fn path_to_perm(path: &str) -> String {
     let path = path.split('?').next().unwrap_or(path);
-    let segs: Vec<&str> = path
-        .split('/')
-        .filter(|s| !s.is_empty())
-        .collect();
+    let segs: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
     // 对齐 cool-admin-go：路由含 /admin 前缀时跳过 admin；我们的路由无 admin 前缀
     let segs = if segs.first() == Some(&"admin") {
         &segs[1..]
@@ -89,10 +88,10 @@ pub async fn authority_middleware(mut req: Request, next: Next) -> Response {
         .extensions()
         .get::<sa_token_plugin_axum::SaLoginId>()
         .map(|id| id.0.clone());
-    if login_id.is_none() {
-        if let Some(tok) = extract_token(req.headers()) {
-            login_id = cool_auth::get_login_id(&tok).await;
-        }
+    if login_id.is_none()
+        && let Some(tok) = extract_token(req.headers())
+    {
+        login_id = cool_auth::get_login_id(&tok).await;
     }
     let Some(login_id) = login_id else {
         return unauthorized("登陆失效～");
@@ -203,8 +202,14 @@ mod tests {
     #[test]
     fn path_to_perm_basic() {
         assert_eq!(path_to_perm("/base/sys/menu/add"), "base:sys:menu:add");
-        assert_eq!(path_to_perm("/base/sys/menu/page?x=1"), "base:sys:menu:page");
-        assert_eq!(path_to_perm("/admin/base/sys/role/list"), "base:sys:role:list");
+        assert_eq!(
+            path_to_perm("/base/sys/menu/page?x=1"),
+            "base:sys:menu:page"
+        );
+        assert_eq!(
+            path_to_perm("/admin/base/sys/role/list"),
+            "base:sys:role:list"
+        );
         assert_eq!(path_to_perm("/dict/type/info"), "dict:type:info");
     }
 

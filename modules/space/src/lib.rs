@@ -1,10 +1,10 @@
 //! mod-space：对齐 cool-admin-go modules/space（文件空间）
 
-use cool_core::controller::{crud_router, ApiAllow};
-use cool_core::service::CrudService;
-use cool_core::QueryOp;
-use cool_db::{ColumnMeta, TableDef};
 use axum::Router;
+use cool_core::QueryOp;
+use cool_core::controller::{ApiAllow, crud_router};
+use cool_core::service::CrudService;
+use cool_db::{ColumnMeta, TableDef};
 
 fn col(name: &str, sql_type: &str, not_null: bool, comment: &str) -> ColumnMeta {
     ColumnMeta {
@@ -83,18 +83,37 @@ pub fn routes<S: cool_core::CrudState>() -> Router<S> {
 
     let ty = CrudService::new("space_type")
         .not_null_key("name", "类别名称不能为空")
-        .list_op(QueryOp::new().field_eq(&["parentId"]).key_word_field(&["name"]))
-        .page_op(QueryOp::new().field_eq(&["parentId"]).key_word_field(&["name"]));
+        .list_op(
+            QueryOp::new()
+                .field_eq(&["parentId"])
+                .key_word_field(&["name"]),
+        )
+        .page_op(
+            QueryOp::new()
+                .field_eq(&["parentId"])
+                .key_word_field(&["name"]),
+        );
 
     Router::new()
         .merge(crud_router("/space/info", info, ApiAllow::default()))
         .merge(crud_router("/space/type", ty, ApiAllow::default()))
 }
 
-/// 模块注册声明（对齐 space/space.go）
+/// 模块注册声明：业务表
 pub fn spec() -> cool_core::ModuleSpec {
     cool_core::ModuleSpec::new("space").tables(all_tables())
 }
 
-/// 模块启动钩子
-pub async fn init(_db: &cool_db::DbManager) {}
+/// 模块初始化（对齐 space/space.go init()）
+pub async fn init(_db: &cool_db::DbManager, _cache: cool_cache::CacheManager) {
+    tracing::debug!("module space init start ...");
+    tracing::debug!("module space init finished ...");
+}
+
+/// 路由分组
+pub fn route_groups<S>() -> cool_core::RouteGroups<S>
+where
+    S: cool_core::CrudState + Clone + Send + Sync + 'static,
+{
+    cool_core::RouteGroups::new().biz(routes::<S>())
+}
