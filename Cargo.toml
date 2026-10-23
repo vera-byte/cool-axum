@@ -18,6 +18,7 @@ members = [
     "crates/cool-auth",
     "crates/cool-cache",
     "crates/cool-file",
+    "crates/cool-raft",
     "crates/cool-gen",
     "modules",
     "modules/base",
@@ -39,6 +40,7 @@ cool-core = { path = "crates/cool-core" }
 cool-auth = { path = "crates/cool-auth" }
 cool-cache = { path = "crates/cool-cache" }
 cool-file = { path = "crates/cool-file" }
+cool-raft = { path = "crates/cool-raft" }
 modules = { path = "modules" }
 mod-base = { path = "modules/base" }
 mod-dict = { path = "modules/dict" }
@@ -63,6 +65,9 @@ bcrypt = "0.16"
 md5 = "0.7"
 cron = "0.15"
 base64 = "0.22"
+openraft = { version = "0.10.0-alpha.37", features = ["serde"] }
+openraft-memstore = "0.10.0-alpha.37"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # 官方 sa-token-rust（git 依赖）
 sa-token-plugin-axum = { git = "https://github.com/sa-tokens/sa-token-rust", package = "sa-token-plugin-axum", features = ["axum-08", "memory", "redis"] }
@@ -76,6 +81,7 @@ cool-core = { workspace = true }
 cool-auth = { workspace = true }
 cool-cache = { workspace = true }
 cool-file = { workspace = true }
+cool-raft = { workspace = true }
 mod-base = { workspace = true }
 mod-dict = { workspace = true }
 mod-demo = { workspace = true }

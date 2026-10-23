@@ -15,6 +15,8 @@ use tokio::task::JoinHandle;
 #[derive(Clone)]
 pub struct Scheduler {
     db: DbManager,
+    /// 是否允许执行任务（Raft 模式下仅 Leader 置 true）
+    leader_ok: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 struct JobState {
@@ -73,7 +75,26 @@ pub fn clear_old_logs(deep: bool) {
 impl Scheduler {
     pub fn new(db: DbManager) -> Self {
         let _ = LOG_DB.set(db.clone());
-        Self { db }
+        Self {
+            db,
+            leader_ok: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
+        }
+    }
+
+    /// 设置是否允许执行（Raft 模式：仅 Leader 为 true）
+    pub fn set_leader_ok(&self, v: bool) {
+        self.leader_ok
+            .store(v, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// 是否允许执行任务
+    pub fn may_run(&self) -> bool {
+        self.leader_ok.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Leader 标志句柄（供后台任务更新）
+    pub fn leader_flag(&self) -> std::sync::Arc<std::sync::atomic::AtomicBool> {
+        self.leader_ok.clone()
     }
 
     /// 克隆底层 DbManager
@@ -167,9 +188,13 @@ impl Scheduler {
         };
 
         let db = self.db.clone();
+        let allow_run = self.leader_ok.clone();
         let task_id = id.to_string();
         let handle = tokio::spawn(async move {
-            run_loop(db, task_id, schedule, service, start_date, end_date, limit).await;
+            run_loop(
+                db, task_id, schedule, service, start_date, end_date, limit, allow_run,
+            )
+            .await;
         });
 
         jobs()
@@ -268,6 +293,7 @@ async fn run_loop(
     start_date: Option<String>,
     end_date: Option<String>,
     limit: i64,
+    allow_run: std::sync::Arc<std::sync::atomic::AtomicBool>,
 ) {
     let mut executed: i64 = 0;
     loop {
@@ -317,11 +343,20 @@ async fn run_loop(
             break;
         }
 
+        // Leader 门控：非 Leader 周期不执行
+        if !allow_run.load(std::sync::atomic::Ordering::Relaxed) {
+            tracing::debug!(task_id, "非 Leader，跳过本轮执行");
+            continue;
+        }
+
         let result = funcs::run_service(&service);
         if let Err(ref e) = result {
             tracing::error!(task_id, error = %e, "任务执行失败");
         }
-        let sched = Scheduler { db: db.clone() };
+        let sched = Scheduler {
+            db: db.clone(),
+            leader_ok: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
+        };
         sched
             .record(task_id.parse().unwrap_or(0), &result, "调度执行")
             .await;
@@ -331,7 +366,10 @@ async fn run_loop(
         let tid = task_id.clone();
         let db2 = db.clone();
         tokio::spawn(async move {
-            let s = Scheduler { db: db2 };
+            let s = Scheduler {
+                db: db2,
+                leader_ok: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            };
             let _ = tid.parse::<i64>().map(|id| async move {
                 s.set_next_run_time(id).await;
             });

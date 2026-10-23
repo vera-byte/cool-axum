@@ -29,6 +29,7 @@ cargo run
 | **请求日志** | 每请求控制台输出 + `base_sys_log` 落库（敏感字段脱敏） |
 | **缓存** | 内存 / Redis 双模式，登录失败计数、参数缓存 |
 | **多节点部署** | 无状态应用 + Redis 共享会话，Docker Compose / K8s 水平扩展 |
+| **Raft 选主** | openraft 集群选主，仅 Leader 执行定时任务，防重复调度 / 裂脑 |
 | **代码生成器** | `cool-gen` 从数据库表一键生成 CRUD 模块 |
 | **文档站** | 完整 Mintlify 文档（`docs/`） |
 
@@ -43,6 +44,7 @@ cargo run
 | 数据库 | [sqlx](https://github.com/launchbadge/sqlx)（MySQL / PostgreSQL） |
 | 缓存 / 会话 | Redis |
 | 任务调度 | cron 表达式解析 + tokio 循环 |
+| 分布式选主 | [openraft](https://docs.rs/openraft)（Leader 执行定时任务） |
 | 密码哈希 | bcrypt（兼容旧 MD5） |
 | 文档 | Mintlify |
 
@@ -134,6 +136,7 @@ cool-axum/
 │   ├── cool-auth/         # sa-token 封装：登录、权限、密码哈希
 │   ├── cool-cache/        # 缓存：内存 / Redis 双模式
 │   ├── cool-file/         # 文件上传：local / minio / oss
+│   ├── cool-raft/         # openraft 选主 + RocksDB 持久化 + HTTP RPC
 │   └── cool-gen/          # 代码生成器 CLI
 ├── docs/                  # Mintlify 文档站
 ├── deploy/                # nginx.conf / K8s 清单
@@ -194,6 +197,22 @@ POST /task/info/add
 
 支持 cron（6 字段）/ interval（毫秒）、startDate/endDate/limit、执行日志每任务保留 20 条。
 
+多节点下开启 Raft 选主可保证**仅 Leader 执行任务**：
+
+```yaml
+raft:
+  enable: true
+  nodeId: 1
+  selfAddr: "http://127.0.0.1:8001"
+  dataDir: "./data/raft"
+  peers:
+    - "1:http://127.0.0.1:8001"
+    - "2:http://127.0.0.1:8002"
+    - "3:http://127.0.0.1:8003"
+```
+
+Raft 状态用 RocksDB 持久化到 `dataDir`（重启可恢复）。`GET /raft/status` 查看角色与 Leader；详见 [分布式架构](docs/distributed.mdx)。
+
 ### 文件上传
 
 ```bash
@@ -234,6 +253,8 @@ kubectl apply -f deploy/k8s/
 
 多节点共享 Redis 会话，已验证：**节点 A 登录 → 节点 B 可用 → A 登出 → B 立即 401**。
 
+多节点定时任务请开启 `raft.enable`（见「定时任务」），由 Leader 单点调度。
+
 ---
 
 ## 文档
@@ -252,10 +273,14 @@ cd docs && npx mintlify dev
 ## 测试
 
 ```bash
-cargo test --workspace
+cargo test --workspace   # 16 个单测
+cargo clippy --workspace --all-targets   # 0 告警
 ```
 
-24 个单测覆盖：SQL 构建器、配置解析、密码哈希、缓存、权限映射等；另有全链路 e2e 验证。
+单测覆盖 SQL 构建器、配置解析、密码哈希、缓存、权限映射等。
+
+**最近回归验证**（重构后）：构建 0 告警 · 单测 16/16 · clippy 0 告警 · e2e 16/16
+（启动 / 开放接口 / 登录 / comm / 五模块 CRUD / 上传 / 权限隔离）
 
 ---
 

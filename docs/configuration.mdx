@@ -97,6 +97,31 @@ modules:
         enable: true            # 操作日志
 ```
 
+## raft（可选）
+
+启用后集群选主，**仅 Leader 执行定时任务**。详见 [分布式架构](/distributed)。
+
+```yaml
+raft:
+  enable: true                  # 默认 false：单机模式，任务本地执行
+  nodeId: 1                     # 本节点 ID（集群内唯一）
+  selfAddr: "http://127.0.0.1:8001"
+  dataDir: "./data/raft"        # RocksDB 持久化目录（每节点独立）
+  peers:
+    - "1:http://127.0.0.1:8001"
+    - "2:http://127.0.0.1:8002"
+```
+
+| 字段 | 默认 | 说明 |
+|------|------|------|
+| `enable` | `false` | 是否启用 Raft 选主 |
+| `nodeId` | `1` | 本节点 ID，须与 peers 中自己的条目一致 |
+| `selfAddr` | — | 本节点 HTTP API 地址（节点间 RPC） |
+| `dataDir` | `./data/raft` | RocksDB 目录（日志 / vote / applied-state） |
+| `peers` | `[]` | 集群成员 `id:addr` 列表 |
+
+各节点共用同一 `peers`，`nodeId` / `selfAddr` / `dataDir` 各自不同。最小节点 ID 负责 bootstrap；重启后从 `dataDir` 恢复并跳过 bootstrap。
+
 ## 完整示例
 
 ```yaml

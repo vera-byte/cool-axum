@@ -125,3 +125,33 @@ cool-axum/
 ### 质量
 - `cargo fmt` 全量格式化
 - `cargo clippy` 0 告警（type alias、Box 枚举等）
+
+### 验证（重构后回归）
+
+- 构建 0 告警、单测 16/16、clippy 0 告警、e2e 16/16
+- 覆盖：启动/开放接口/登录/comm/五模块 CRUD/上传/权限隔离
+
+
+## Unreleased · Raft 分布式选主
+
+### 定时任务单点执行
+- 新增 `crates/cool-raft`（openraft 0.10 + RocksDB 持久化，HTTP RPC）
+- 配置 `raft.{enable,nodeId,selfAddr,dataDir,peers}`；默认关闭（单机任务本地跑）
+- 启用后仅**有效 Leader**（角色 Leader 且 quorum 可达）执行任务，防重复调度 / 裂脑
+- bootstrap：最小节点 ID 初始化全成员集群；启动失败回退单机
+
+### RocksDB 持久化存储
+- `RocksLogStore`：日志 + vote + committed 位点，进程重启可恢复
+- `RocksStateMachine`：applied-state（last_log_id + membership），不做 Raft KV
+- `raft.dataDir`（默认 `./data/raft`）每节点独立；重启跳过 bootstrap
+- 单测覆盖 open/reopen 持久化往返
+- **集群冒烟通过**：全量重启 / 杀 Leader 重启均从 RocksDB 恢复 vote·日志·成员，3/3 跳过 bootstrap，term 与 lastLogIndex 连续
+
+### 集群管理 API
+- `GET /raft/status` — 节点角色 / Leader / term / peers
+- `POST /raft/add-learner` / `POST /raft/change-membership` — 成员管理
+- 节点间 RPC：`/raft/vote` / `/raft/append`（免鉴权）
+
+### 文档
+- `distributed` 增补 Raft 选主、任务门控、RocksDB 持久化与已知边界
+- `configuration` / `api-reference` / `introduction` / README / DELIVERY 同步

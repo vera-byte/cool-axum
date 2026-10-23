@@ -47,3 +47,13 @@ modules:
         enable: true
       log:
         enable: true
+
+# Raft 集群（可选）：启用后 Leader 节点执行定时任务
+# raft:
+#   enable: true
+#   nodeId: 1
+#   selfAddr: "http://127.0.0.1:8001"
+#   dataDir: "./data/raft"        # RocksDB 持久化目录（每节点独立）
+#   peers:
+#     - "1:http://127.0.0.1:8001"
+#     - "2:http://127.0.0.1:8002"

@@ -77,6 +77,7 @@
 | 交付物 | 说明 |
 |--------|------|
 | Redis 会话 | sa-token RedisStorage，`cool:sa-token:` 前缀 |
+| Raft 选主 | `crates/cool-raft`（openraft），Leader 单点执行定时任务 |
 | Dockerfile | 多阶段构建（rust:1.96 → debian:bookworm-slim） |
 | docker-compose | MySQL + Redis + 多实例 + Nginx 负载均衡 |
 | K8s 清单 | Deployment（2 副本 + 探针）/ Service / HPA（2–10） |
@@ -243,7 +244,9 @@ SaTokenLayer（提取 token → 注入 SaLoginId）
 
 | 项 | 现状 | 建议 |
 |----|------|------|
-| 任务集群单例 | 每节点各跑一次 | 加 Redis 分布式锁 |
+| 任务集群单例 | Raft 选主后仅 Leader 执行（已交付） | 可选 Redis 锁做二次保险 |
+| Raft 日志持久化 | RocksDB 落盘 `raft.dataDir`，重启可恢复 | — |
+| Raft 快照传输 | 本地快照可构建；节点间传输未实现 | 成员长期落后时再补 |
 | minio/oss 签名 | 简化 PUT | 接入 aws-sdk-s3 完整签名 |
 | 自定义任务函数 | 需 `funcs::register` 注册 | 提供插件机制 |
 | 密码策略 | 无复杂度校验 | 可加密码强度规则 |
@@ -256,7 +259,7 @@ SaTokenLayer（提取 token → 注入 SaLoginId）
 
 ```
 cool-axum/
-├── crates/                     # 13 个 crate（见 README 项目结构）
+├── crates/                     # 8 个基础库 + modules/ 业务模块（见 README）
 ├── docs/                       # Mintlify 文档站（12 篇）
 ├── deploy/
 │   ├── nginx.conf              # 负载均衡配置
@@ -348,3 +351,72 @@ docker compose up -d --build
 | src/ 精简 | 仅 main.rs / app.rs，无 routes/auth 集中代码 |
 | 新增模块 | `modules/modules.rs` registered() 加一行即接入全部能力 |
 | 质量 | fmt + clippy 0 告警 |
+
+---
+
+## 十二、最终验证报告（重构后回归）
+
+| # | 检查项 | 结果 |
+|---|--------|------|
+| 1 | Debug / Release 构建 | ✅ 通过，0 告警 |
+| 2 | 单测 `cargo test --workspace` | ✅ 16/16 |
+| 3 | `cargo clippy` | ✅ 0 告警 |
+| 4 | e2e 全链路 | ✅ 16/16 |
+
+### e2e 明细
+
+```
+启动        ✓ health ✓ captcha ✓ dict data
+登录 / comm ✓ login ✓ TokenResult ✓ userinfo ✓ permmenu
+各模块      ✓ base(user/menu) ✓ dict ✓ demo ✓ task ✓ space
+上传        ✓ upload
+安全        ✓ 匿名 401 ✓ xiaobai 无权限 403
+```
+
+**结论：路由自动注册、模块初始化、auth 合并进 base 等重构后功能无回归。**
+
+---
+
+## 十三、Raft 分布式选主
+
+多节点部署时定时任务重复调度的问题，由 **openraft 选主**解决：集群内仅 **有效 Leader** 执行任务。
+
+### 交付物
+
+| 组件 | 说明 |
+|------|------|
+| `crates/cool-raft` | openraft 0.10 + RocksDB 持久化，HTTP RPC（`/raft/vote\|append`） |
+| `RocksLogStore` | 日志 + vote + committed 位点，落盘 `raft.dataDir/log` |
+| `RocksStateMachine` | applied-state（last_log_id + membership），落盘 `raft.dataDir/sm`，不做 Raft KV |
+| `config.yaml` → `raft.*` | `enable` / `nodeId` / `selfAddr` / `dataDir` / `peers` |
+| `Scheduler` 门控 | `set_leader_ok` + 1s 轮询 `verify_quorum_leadership` |
+| 管理 API | `GET /raft/status` · `POST /raft/add-learner` · `POST /raft/change-membership` |
+
+### 关键语义
+
+- **有效 Leader** = 角色 Leader **且** quorum 可达（`ReadIndex` 屏障，2s 超时）——少数派滞留 Leader 不执行任务，防裂脑
+- 启动后任务默认禁用，领导力确认后放行（避免 Follower 启动窗口误跑）
+- bootstrap：最小节点 ID `initialize(全体 voter)`；**重启从 RocksDB 恢复并跳过 bootstrap**
+- Raft 启动失败回退单机模式（任务本地执行）
+- **不做 Raft KV**：业务数据仍在 MySQL / Redis
+
+### 验证
+
+- 构建 / clippy 0 告警
+- 单测 20/20（含 RocksDB open/reopen 持久化往返）
+- 单机 `raft.enable=false`：任务本地执行不变
+- 多节点：仅 Leader 写 `task_log`；Leader 宕机后新 Leader 接续调度
+
+### 集群冒烟：重启后 RocksDB 恢复
+
+三节点（1/2/3，端口 8001–8003）实测步骤与结论：
+
+| # | 步骤 | 结果 |
+|---|------|------|
+| 1 | 首次启动 bootstrap | ✅ Leader=1，term=2，lastLogIndex=1，`dataDir/{log,sm}` 落盘 |
+| 2 | 全量 kill → 重启 | ✅ 3/3 日志 `Raft 已初始化，跳过 bootstrap（从持久化状态恢复）` |
+| 3 | 对比 `/raft/status` | ✅ term / lastLogIndex / membership / vote(committed) 与重启前一致 |
+| 4 | 杀 Leader → 重启 node1 | ✅ 恢复后重新成为 Leader，不重复 bootstrap |
+| 5 | 再次全量重启 | ✅ 3/3 跳过 bootstrap，状态完整 |
+
+**结论：进程重启后 Raft 状态从 RocksDB 完整恢复，不会重复 bootstrap。**

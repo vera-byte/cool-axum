@@ -14,6 +14,7 @@ description: cool-axum —— 基于 Axum 的 Rust 后台管理框架
 - **系统管理模块**：用户 / 角色 / 菜单 / 部门 / 参数 / 日志
 - **业务模块**：数据字典、定时任务、文件空间、示例模块
 - **多节点部署**：无状态应用 + Redis 会话，Docker / K8s 水平扩展
+- **Raft 选主**：集群内仅 Leader 执行定时任务，避免重复调度
 
 ## 技术栈
 
@@ -23,6 +24,7 @@ description: cool-axum —— 基于 Axum 的 Rust 后台管理框架
 | 鉴权 | sa-token-rust / sa-token-plugin-axum |
 | 数据库 | sqlx（MySQL / PostgreSQL） |
 | 会话/缓存 | Redis |
+| 分布式选主 | openraft（任务单点执行） |
 | 文档 | Mintlify |
 
 ## 与 cool-admin-go 的对应关系

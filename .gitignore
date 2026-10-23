@@ -1,4 +1,5 @@
 /target
 public/uploads/
+data/
 *.log
 .DS_Store

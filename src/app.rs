@@ -23,6 +23,7 @@ pub struct AppState {
     pub scheduler: Arc<Scheduler>,
     pub file: Arc<FileDriver>,
     pub cache: CacheManager,
+    pub raft: Option<cool_raft::Cluster>,
 }
 
 impl CrudState for AppState {
@@ -102,6 +103,57 @@ pub async fn serve(config: AppConfig) -> anyhow::Result<()> {
         }
     };
 
+    // Raft 集群（可选）：启用后用于选主，Leader 执行定时任务
+    let raft = if config.raft.enable {
+        let peers: Vec<(cool_raft::NodeId, String)> = config
+            .raft
+            .peers
+            .iter()
+            .filter_map(|p| {
+                let mut it = p.splitn(2, ':');
+                let id: u64 = it.next()?.parse().ok()?;
+                let addr = it.next()?.to_string();
+                Some((id, addr))
+            })
+            .collect();
+        match cool_raft::start(
+            config.raft.node_id,
+            config.raft.self_addr.clone(),
+            peers,
+            std::path::PathBuf::from(&config.raft.data_dir),
+            None,
+        )
+        .await
+        {
+            Ok(c) => {
+                tracing::info!(node_id = c.node_id, "Raft 集群已启动");
+                // Leader 门控：初始置 false，后台轮询更新（避免 Follower 启动窗口误执行）
+                scheduler.set_leader_ok(false);
+                {
+                    let c = c.clone();
+                    let flag = scheduler.leader_flag();
+                    tokio::spawn(async move {
+                        loop {
+                            flag.store(
+                                c.verify_quorum_leadership().await,
+                                std::sync::atomic::Ordering::Relaxed,
+                            );
+                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                        }
+                    });
+                }
+                Some(c)
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "Raft 启动失败，继续单机模式");
+                None
+            }
+        }
+    } else {
+        tracing::info!("Raft 未启用（单机模式，任务本地执行）");
+        None
+    };
+
     let state = AppState {
         config: Arc::new(config.clone()),
         db,
@@ -109,13 +161,29 @@ pub async fn serve(config: AppConfig) -> anyhow::Result<()> {
         scheduler,
         file,
         cache,
+        raft,
     };
 
     // 框架级路由（健康检查/服务信息）
-    let extra_open = axum::Router::new()
+    let mut extra_open = axum::Router::new()
         .route("/", get(index))
         .route("/health", get(health))
-        .route("/base/health", get(health));
+        .route("/base/health", get(health))
+        .route("/raft/status", get(raft_status))
+        .route("/raft/add-learner", axum::routing::post(raft_add_learner))
+        .route(
+            "/raft/change-membership",
+            axum::routing::post(raft_membership),
+        );
+
+    // Raft RPC 入站路由（/raft/vote|append|snapshot），必须免鉴权
+    if let Some(c) = &state.raft {
+        extra_open = extra_open.merge(cool_raft::network::raft_routes(
+            cool_raft::network::RaftRpcState {
+                raft: c.raft.clone(),
+            },
+        ));
+    }
 
     // 业务路由由 modules 注册中心自动装配
     let app = modules::build_router(state.clone(), state.sa.clone(), extra_open);
@@ -216,4 +284,54 @@ async fn health(axum::extract::State(state): axum::extract::State<AppState>) -> 
         if db_ok { "success" } else { "degraded" },
         Some(serde_json::Value::Object(detail)),
     ))
+}
+
+/// GET /raft/status —— 集群状态
+async fn raft_status(axum::extract::State(state): axum::extract::State<AppState>) -> Json<BaseRes> {
+    match &state.raft {
+        Some(c) => Json(ok(c.status().await)),
+        None => Json(ok(serde_json::json!({
+            "enabled": false,
+            "mode": "standalone",
+        }))),
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct LearnerReq {
+    id: u64,
+    addr: String,
+}
+
+/// POST /raft/add-learner —— 添加学习者
+async fn raft_add_learner(
+    axum::extract::State(state): axum::extract::State<AppState>,
+    Json(req): Json<LearnerReq>,
+) -> Json<BaseRes> {
+    match &state.raft {
+        Some(c) => match c.add_learner(req.id, req.addr).await {
+            Ok(()) => Json(ok(serde_json::json!({"ok": true}))),
+            Err(e) => Json(cool_core::response::fail(e)),
+        },
+        None => Json(cool_core::response::fail("Raft 未启用")),
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct MembershipReq {
+    members: Vec<u64>,
+}
+
+/// POST /raft/change-membership —— 变更成员
+async fn raft_membership(
+    axum::extract::State(state): axum::extract::State<AppState>,
+    Json(req): Json<MembershipReq>,
+) -> Json<BaseRes> {
+    match &state.raft {
+        Some(c) => match c.change_membership(req.members).await {
+            Ok(()) => Json(ok(serde_json::json!({"ok": true}))),
+            Err(e) => Json(cool_core::response::fail(e)),
+        },
+        None => Json(cool_core::response::fail("Raft 未启用")),
+    }
 }

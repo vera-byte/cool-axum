@@ -194,6 +194,35 @@ pub struct ModulesConfig {
     pub base: BaseModuleConfig,
 }
 
+/// raft 集群配置（可选）
+#[derive(Debug, Clone, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RaftSection {
+    /// 是否启用（默认 false：单机模式，任务本地执行）
+    #[serde(default)]
+    pub enable: bool,
+    /// 本节点 ID
+    #[serde(default = "default_node_id")]
+    pub node_id: u64,
+    /// 本节点 API 地址（供其他节点 RPC）
+    #[serde(default)]
+    pub self_addr: String,
+    /// 集群成员：id:addr 列表
+    #[serde(default)]
+    pub peers: Vec<String>,
+    /// RocksDB 持久化目录（每节点独立）
+    #[serde(default = "default_raft_data_dir")]
+    pub data_dir: String,
+}
+
+fn default_node_id() -> u64 {
+    1
+}
+
+fn default_raft_data_dir() -> String {
+    "./data/raft".to_string()
+}
+
 /// modules.base
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct BaseModuleConfig {
@@ -278,6 +307,9 @@ pub struct AppConfig {
     pub cool: CoolConfig,
     #[serde(default)]
     pub modules: ModulesConfig,
+    /// Raft 集群（可选）
+    #[serde(default)]
+    pub raft: RaftSection,
 }
 
 impl Default for ServerConfig {

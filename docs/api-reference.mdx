@@ -42,6 +42,19 @@ description: 统一响应、错误码与路由清单
 | POST | `/base/login` | 登录 |
 | POST | `/base/logout` | 登出 |
 
+### Raft 集群（启用 `raft.enable` 后）
+
+| 方法 | 路径 | Body | 说明 |
+|------|------|------|------|
+| GET | `/raft/status` | — | 节点角色 / Leader / term / peers |
+| POST | `/raft/add-learner` | `{"id":2,"addr":"http://..."}` | 添加学习者 |
+| POST | `/raft/change-membership` | `{"members":[1,2,3]}` | 变更投票成员 |
+| POST | `/raft/vote` | Raft RPC | 选举投票（节点间） |
+| POST | `/raft/append` | Raft RPC | 日志复制（节点间） |
+| POST | `/raft/snapshot` | — | 快照（暂未实现，501） |
+
+以上路由免鉴权（节点间 RPC 不能带登录态）。详见 [分布式架构](/distributed)。
+
 ## 需登录接口
 
 所有业务 CRUD 挂在登录校验之下，携带 `Authorization: Bearer <token>`。
