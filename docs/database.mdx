@@ -1,0 +1,142 @@
+---
+title: 数据库
+description: 多数据源、autoMigrate、软删除
+---
+
+## 多数据源
+
+配置文件 `database` 节支持多分组，`default` 为默认组：
+
+```yaml
+database:
+  default:
+    type: "mysql"
+    host: "127.0.0.1"
+    port: "3306"
+    user: "root"
+    pass: "123456"
+    name: "cooltest"
+  report:
+    type: "pgsql"
+    host: "127.0.0.1"
+    port: "5432"
+    user: "postgres"
+    pass: "postgres"
+    name: "report"
+```
+
+`CrudService` 通过 `.group("report")` 绑定数据源。
+
+## MySQL / PostgreSQL
+
+`type: mysql` 或 `type: pgsql`，SQL 构建器自动处理方言差异：
+
+- 标识符引用：MySQL 反引号，PG 双引号
+- 类型映射：`datetime` → `TIMESTAMP`，`json` → `JSONB` 等
+- 自增主键：MySQL `AUTO_INCREMENT`
+
+## autoMigrate
+
+`cool.autoMigrate: true` 时启动自动建表（`CREATE TABLE IF NOT EXISTS`），对齐 cool-admin-go：
+
+```yaml
+cool:
+  autoMigrate: true
+```
+
+启动日志：
+
+```
+INFO autoMigrate 完成 ok=17 fail=0
+```
+
+当前 17 张表：
+
+| 模块 | 表 |
+|------|----|
+| base | base_sys_user / role / menu / department / param / log / user_role / role_menu / role_department |
+| dict | dict_type / dict_info |
+| demo | demo_sample / demo_goods |
+| task | task_info / task_log |
+| space | space_info / space_type |
+
+## 软删除
+
+- `delete` 接口写 `deleteTime = CURRENT_TIMESTAMP`
+- 所有查询自动过滤 `deleteTime IS NULL`
+- 需要查已删数据时手动写 SQL
+
+## 时间列
+
+`createTime` / `updateTime` 由 CRUD 引擎自动填充，列名可在配置中改（`createdAt` / `updatedAt` / `deletedAt`）。
+
+## 种子数据（initjson）
+
+对齐 cool-admin-go `resource/initjson`：首次启动批量插入菜单/角色/用户/部门/参数/字典/任务等基础数据，`base_sys_init` 表按 `(group, table)` 落账去重，重复启动自动跳过。
+
+| 模块 | 种子表 |
+|------|--------|
+| base | base_sys_menu / user / user_role / role / role_menu / department / role_department / param |
+| dict | dict_type / dict_info |
+| task | task_info |
+
+注意：
+
+- 种子用户密码为 cool-admin-go 的 **MD5**（如 admin/123456），登录走 MD5 兼容校验；**改密后自动升级为 bcrypt** 并吊销旧会话
+- 仅在 `cool.autoMigrate: true` 时执行
+- 想重新初始化：清空 `base_sys_init` 对应行并删除业务表数据
+
+## 列定义
+
+模块内用 `TableDef` 声明表结构：
+
+```rust
+use cool_db::{TableDef, ColumnMeta};
+
+TableDef {
+    name: "demo_sample".into(),
+    columns: vec![
+        ColumnMeta {
+            name: "id".into(),
+            sql_type: "bigint".into(),
+            not_null: true,
+            primary_key: true,
+            comment: "主键".into(),
+            auto_increment: true,
+            default: None,
+        },
+        // ...
+    ],
+}
+```
+
+支持 `default: Some("1".into())` 生成 `DEFAULT 1`。
+
+## 缓存（CacheManager）
+
+对齐 cool-admin-go `cool.CacheManager`：`Get / Set / Remove / MustGetOrSet`，`ttl=0` 永不过期。
+
+| 模式 | 触发条件 | 说明 |
+|------|----------|------|
+| Redis | 配置 `redis.cool` | 多节点共享，登录失败计数/参数缓存全集群一致 |
+| 内存 | 未配置 Redis | 进程内 HashMap + TTL，单机开发 |
+
+### 已接入缓存
+
+| Key 模式 | 用途 |
+|----------|------|
+| `admin:loginFail:<user>:<ip>` | 登录失败计数（5 次/10 分钟锁定） |
+| `param:<keyName>` | 系统参数缓存（启动预热，param 变更后刷新） |
+
+### API
+
+```rust
+// 业务侧通过 AppState.cache 使用
+state.cache.set("k", json!("v"), Duration::from_secs(60)).await;
+state.cache.get("k").await;
+state.cache.remove("k").await;
+state.cache.get_or_set("k", Duration::ZERO, || json!("default")).await;
+state.cache.increment("counter", Duration::from_secs(60)).await;
+```
+
+`/health` 返回当前缓存模式（`"cache": "redis" | "memory"`）。

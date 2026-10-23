@@ -1,0 +1,82 @@
+# K8s 部署清单：多节点同一单体
+# 用法：kubectl apply -f deploy/k8s/
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cool-axum
+  labels:
+    app: cool-axum
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cool-axum
+  template:
+    metadata:
+      labels:
+        app: cool-axum
+    spec:
+      containers:
+        - name: cool-axum
+          image: cool-axum:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8001
+              name: http
+          env:
+            - name: COOL_CONFIG
+              value: /app/config.yaml
+            - name: RUST_LOG
+              value: info
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cool-axum
+spec:
+  selector:
+    app: cool-axum
+  ports:
+    - name: http
+      port: 8001
+      targetPort: http
+  type: ClusterIP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: cool-axum
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: cool-axum
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

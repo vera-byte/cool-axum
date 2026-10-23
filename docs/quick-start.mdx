@@ -1,0 +1,102 @@
+---
+title: 快速开始
+description: 5 分钟跑起 cool-axum
+---
+
+## 环境要求
+
+- Rust 1.85+（edition 2024）
+- MySQL 8.x 或 PostgreSQL 14+
+- Redis 7+（多节点会话共享，单机开发可省略）
+
+## 获取代码
+
+```bash
+cd cool-axum
+cargo build
+```
+
+## 项目结构
+
+```text
+cool-axum/
+├── src/          # 启动入口（cargo run 直接可用）
+├── crates/       # 基础设施库（cool-config/db/core/auth/cache/file/gen）
+└── modules/      # 业务模块（base/dict/task/space/demo，对齐 cool-admin-go）
+```
+
+## 配置
+
+编辑 `config.yaml`（对齐 cool-admin-go 的配置结构）：
+
+```yaml
+server:
+  address: ":8001"
+
+database:
+  default:
+    type: "mysql"
+    host: "127.0.0.1"
+    port: "3306"
+    user: "root"
+    pass: "123456"
+    name: "cooltest"
+
+redis:
+  cool:
+    address: "127.0.0.1:6379"
+    db: 0
+
+cool:
+  autoMigrate: true   # 启动时自动建表
+```
+
+## 启动
+
+```bash
+cargo run
+# 或指定配置
+COOL_CONFIG=config.yaml cargo run
+```
+
+启动日志：
+
+```
+INFO cool-axum 启动中... path=config.yaml address=:8001
+INFO 数据源已注册（惰性连接） group=default db_type=mysql
+INFO autoMigrate 完成 ok=17 fail=0
+INFO sa-token Redis 会话存储就绪
+INFO cool-axum 已启动，监听 0.0.0.0:8001
+```
+
+## 验证
+
+### 健康检查
+
+```bash
+curl http://127.0.0.1:8001/health
+```
+
+### 登录
+
+```bash
+curl -X POST http://127.0.0.1:8001/base/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"admin123"}'
+```
+
+### 调用 CRUD
+
+```bash
+# 用登录返回的 token
+curl -X POST http://127.0.0.1:8001/base/sys/user/page \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"page":1,"size":10}'
+```
+
+## 下一步
+
+- 了解 [CRUD 引擎](/crud) 的用法
+- 配置 [登录鉴权](/authentication)
+- 阅读 [配置说明](/configuration)

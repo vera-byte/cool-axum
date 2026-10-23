@@ -1,0 +1,19 @@
+[package]
+name = "cool-gen"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "cool-gen"
+path = "src/main.rs"
+
+[dependencies]
+cool-config = { workspace = true }
+cool-db = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

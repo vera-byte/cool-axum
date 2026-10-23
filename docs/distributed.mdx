@@ -1,0 +1,71 @@
+---
+title: 分布式架构
+description: 多节点部署同一单体
+---
+
+## 架构形态
+
+cool-axum 采用**多节点部署同一单体**：
+
+- 应用**无状态**（会话不落本地内存）
+- **Redis** 共享会话 / 权限 / 角色
+- **MySQL/PG** 共享数据
+- 多实例水平扩展，Nginx / K8s Service 负载均衡
+
+```
+                 ┌─────────────┐
+   client ──────►│  Nginx/LB   │
+                 └──────┬──────┘
+            ┌───────────┼───────────┐
+            ▼           ▼           ▼
+       ┌────────┐  ┌────────┐  ┌────────┐
+       │ axum-1 │  │ axum-2 │  │ axum-N │  同一二进制
+       └───┬────┘  └───┬────┘  └───┬────┘
+           │           │           │
+           ▼           ▼           ▼
+       ┌────────────────────────────────┐
+       │  Redis（会话） + MySQL（数据）   │
+       └────────────────────────────────┘
+```
+
+## 跨节点会话共享（已验证）
+
+1. 节点 A 登录 → token 写入 Redis
+2. 节点 B 携带同一 token → 正常访问
+3. 节点 A 登出 → 节点 B 立即 401
+
+Redis 键前缀 `cool:sa-token:`：
+
+```
+sa:token:<token>           token → loginId
+sa:session:<loginId>       会话数据
+sa:permission:<loginId>    权限点
+sa:role:<loginId>          角色
+```
+
+## 启用条件
+
+`config.yaml` 配置 `redis.cool` 即启用 Redis 会话；未配置回退内存（仅单机）。
+
+```yaml
+redis:
+  cool:
+    address: "127.0.0.1:6379"
+    db: 0
+```
+
+Redis 连接 3 秒超时自动回退内存并打日志，不阻塞启动。
+
+## 健康检查
+
+`GET /health` 返回 DB / 连接池状态，供 LB 与 K8s 探针使用：
+
+```json
+{ "code": 1000, "message": "success", "data": { "database": "up", "pools": 1 } }
+```
+
+## 无状态约定
+
+- 不在进程内缓存会话 / 权限（交给 Redis）
+- 任务调度需外部选主（后续版本接入 Redis 分布式锁）
+- 文件上传走共享存储（local 挂共享盘 / minio / oss）

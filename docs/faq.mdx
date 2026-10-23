@@ -1,0 +1,60 @@
+---
+title: 常见问题
+---
+
+## 启动时数据库连接失败怎么办？
+
+应用使用**惰性连接**，数据库不可用时仍会启动并继续服务，`/health` 会报告 `database: down`。数据库恢复后自动可用。
+
+## Redis 连不上，服务会挂吗？
+
+不会。Redis 连接有 3 秒超时，失败自动回退内存会话并打 ERROR 日志。但多节点部署必须有 Redis，否则各节点会话不互通。
+
+## 如何开启自动建表？
+
+`config.yaml` 中 `cool.autoMigrate: true`。幂等（`IF NOT EXISTS`），重复启动安全。
+
+## `key`、`limit` 等列名报 SQL 语法错误？
+
+已修复：标识符自动加反引号（MySQL）/ 双引号（PG）。请使用最新版本。
+
+## 如何关闭某个 CRUD 接口？
+
+用 `ApiAllow` 白名单：
+
+```rust
+ApiAllow { add: false, delete: false, update: false, info: true, list: true, page: true }
+```
+
+未开放接口返回 404。
+
+## password 会返回给前端吗？
+
+不会。`base_sys_user` 配置了 `hidden_fields(&["password","passwordV"])`，List/Page/Info 自动剥离。
+
+## 多节点登录态如何共享？
+
+配置 `redis.cool` 后自动启用。验证方式：节点 A 登录，节点 B 用同一 token 访问；A 登出后 B 立即 401。
+
+## 支持 PostgreSQL 吗？
+
+支持。`database.default.type: "pgsql"`。类型映射与标识符引用由 SQL 构建器自动处理。
+
+## 如何改 token 有效期？
+
+```yaml
+modules:
+  base:
+    auth:
+      tokenExpire: 36000        # 秒
+      refreshExpire: 1296000
+```
+
+## 默认账号是什么？
+
+`autoMigrate` 开启时自动灌入 initjson 种子数据（对齐 cool-admin-go）：
+
+- **admin / 123456**（超级管理员，permissions `*`）
+- xiaobai / xiaobai123、xiaohei 等演示账号（见 `base_sys_user`）
+
+密码为兼容的 MD5 存储；**改密后自动升级为 bcrypt** 并吊销全部旧会话。生产环境请立即修改。

@@ -1,0 +1,106 @@
+---
+title: 更新日志
+---
+
+## 0.1.0
+
+首个版本：cool-admin-go 完整移植里程碑 M1–M6。
+
+### 核心框架
+
+- Cargo workspace：`cool-config` / `cool-db` / `cool-core` / `cool-auth` / `cool-axum`
+- 统一响应体与错误码（1000/1001/51/1003…）对齐 cool-admin-go
+- 配置结构对齐 `manifest/config/config.yaml`（camelCase）
+
+### CRUD 引擎
+
+- `CrudService` + `QueryOp` + `crud_router`：add/delete/update/info/list/page 六接口
+- 软删除、自动时间填充、唯一键/非空校验、敏感字段剥离
+- SQL 构建器：标识符引用、注入防护、排序白名单
+- MySQL / PostgreSQL 双支持
+
+### 鉴权
+
+- 官方 sa-token-rust（sa-token-plugin-axum）接入
+- 登录 / 登出 / userinfo / 登录校验中间件
+- 权限点 / 角色（StpUtil）
+- Redis 共享会话（多节点即时生效）
+
+### 业务模块
+
+- base：用户 / 角色 / 菜单 / 部门 / 参数 / 日志 / 三张关联表
+- dict：字典类型 / 字典项
+- task：任务 / 任务日志
+- space：文件 / 文件分类
+- demo：示例 CRUD
+
+### 数据库
+
+- autoMigrate（17 表，IF NOT EXISTS）
+- 列默认值、AUTO_INCREMENT、保留字引用
+
+### 部署
+
+- Dockerfile 多阶段构建
+- docker-compose（mysql + redis + 多实例 + nginx）
+- K8s Deployment / Service / HPA
+- 跨节点会话共享验证通过
+
+### 文档
+
+- Mintlify 文档站：介绍 / 快速开始 / 配置 / CRUD / 鉴权 / 数据库 / 模块 / 分布式 / 部署 / API / FAQ
+
+---
+
+## Unreleased
+
+### 前端兼容与模块重构
+
+#### base / dict 模块目录对齐 cool-admin-go
+- `controller/` `service/` `model/` `middleware/` `api/` `config/` `funcs/` `utils/` 分层
+- 路由同时挂 `/admin/base/*` 与 `/base/*` 双前缀
+
+#### 开放接口
+- `GET /admin/base/open/captcha`：图形验证码（height/width/color）
+- `POST /admin/base/open/login`：登录（可选验证码校验，一次性、5 分钟过期）
+- `POST/GET /admin/dict/info/data`：字典数据，**匿名可访问**
+- `GET /admin/base/open/eps`：EPS 元数据
+
+#### 鉴权增强
+- 登录响应对齐 TokenResult（`expire/token/refreshExpire/refreshToken`）
+- 令牌传递兼容：`Authorization: Bearer`、raw、`sa-token` 头、Cookie
+- comm 接口（permmenu/person/upload）自解析 token，不再依赖 extension 注入
+- **超管（userId=1 / perms=*）无条件放行**，无视权限校验
+- comm 路径识别对齐 `/admin/*/comm/*` 通配
+
+#### 请求日志
+- 每请求输出控制台日志（method/path/status/cost）
+- 异步写入 `base_sys_log`（userId/action/ip/params，敏感字段脱敏）
+
+#### 其它
+- dict Data 查询按 `dict_type.key` 过滤（支持 POST body `types` 与 GET query）
+- 验证码/登录/字典数据等前端登录页依赖接口全部免鉴权可用
+
+
+## Unreleased · 目录重构
+
+### Workspace 结构优化（对齐 Rust 规范）
+
+```text
+cool-axum/
+├── src/          # 启动入口 → cargo run 直接可用
+├── crates/       # 基础设施库（cool-*）
+└── modules/      # 业务模块（对齐 cool-admin-go/modules）
+```
+
+- 根 `Cargo.toml` 同时为 package（bin）+ workspace
+- `modules/` 移出 `crates/`，业务模块与基础库职责分离
+- `cool-gen module` 生成到 `modules/{name}`
+- 全部文档路径同步更新
+
+
+## Unreleased · 模块注册中心
+
+- 新增 `modules` crate（`modules/modules.rs`），对齐 cool-admin-go `modules/modules.go`
+- 各模块自治 `spec()`（表+种子）/ `init()`（启动钩子）
+- 新增模块只需在注册中心加两行

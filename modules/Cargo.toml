@@ -1,0 +1,18 @@
+[package]
+name = "modules"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+cool-core = { workspace = true }
+cool-db = { workspace = true }
+cool-cache = { workspace = true }
+mod-base = { workspace = true }
+mod-dict = { workspace = true }
+mod-demo = { workspace = true }
+mod-task = { workspace = true }
+mod-space = { workspace = true }
+
+[lib]
+name = "modules"
+path = "modules.rs"

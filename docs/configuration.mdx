@@ -1,0 +1,157 @@
+---
+title: 配置说明
+description: config.yaml 全量配置项
+---
+
+配置文件默认读取 `config.yaml`，可用环境变量 `COOL_CONFIG` 指定路径。结构与 cool-admin-go 对齐。
+
+## server
+
+```yaml
+server:
+  address: ":8001"              # 监听地址
+  openapiPath: "/api.json"      # OpenAPI 导出路径
+  swaggerPath: "/swagger"       # Swagger 路径
+  clientMaxBodySize: 104857600  # 最大 body（默认 100MB）
+```
+
+## logger
+
+```yaml
+logger:
+  level: "info"   # trace/debug/info/warn/error
+  stdout: true
+```
+
+也可用 `RUST_LOG` 环境变量覆盖。
+
+## database
+
+支持多数据源分组，`default` 为默认组。
+
+```yaml
+database:
+  default:
+    type: "mysql"          # mysql | pgsql
+    host: "127.0.0.1"
+    port: "3306"
+    user: "root"
+    pass: "123456"
+    name: "cooltest"
+    charset: "utf8mb4"
+    timezone: "Asia/Shanghai"
+    debug: true
+    createdAt: "createTime"   # 自动填充列名
+    updatedAt: "updateTime"
+    deletedAt: "deleteTime"   # 软删除列
+  # 其他分组：
+  # baseConfig:
+  #   type: "pgsql"
+  #   ...
+```
+
+## redis
+
+```yaml
+redis:
+  cool:
+    address: "127.0.0.1:6379"
+    db: 0
+    # password: "secret"
+```
+
+配置后 sa-token 自动使用 **Redis 会话存储**（多节点共享）；未配置则回退内存存储（单机开发）。
+
+## cool
+
+```yaml
+cool:
+  autoMigrate: true     # 启动时自动建表（IF NOT EXISTS）
+  eps: true             # 前端 EPS 元数据
+  file:
+    mode: "local"       # local | minio | oss
+    domain: "http://127.0.0.1:8002"
+    oss:
+      endpoint: "192.168.192.110:9000"
+      accessKeyID: "accessKeyID"
+      secretAccessKey: "secretAccessKey"
+      bucketName: "cool-axum"
+      useSSL: false
+      location: "us-east-1"
+```
+
+## modules.base
+
+```yaml
+modules:
+  base:
+    auth:
+      sso: false
+      secret: "cool-base88776655"
+      tokenExpire: 36000        # token 有效期（秒）
+      refreshExpire: 1296000    # 刷新有效期（秒）
+    middleware:
+      authority:
+        enable: true            # 权限拦截
+      log:
+        enable: true            # 操作日志
+```
+
+## 完整示例
+
+```yaml
+server:
+  address: ":8001"
+
+logger:
+  level: "info"
+  stdout: true
+
+database:
+  default:
+    type: "mysql"
+    host: "127.0.0.1"
+    port: "3306"
+    user: "root"
+    pass: "123456"
+    name: "cooltest"
+    charset: "utf8mb4"
+    timezone: "Asia/Shanghai"
+    debug: true
+
+redis:
+  cool:
+    address: "127.0.0.1:6379"
+    db: 0
+
+cool:
+  autoMigrate: true
+
+modules:
+  base:
+    auth:
+      tokenExpire: 36000
+      refreshExpire: 1296000
+```
+
+## 文件上传配置
+
+```yaml
+cool:
+  file:
+    mode: "local"       # local | minio | oss
+    domain: "http://127.0.0.1:8001"   # 返回 URL 的域名前缀
+    oss:                # minio/oss 必填
+      endpoint: "192.168.192.110:9000"
+      accessKeyID: "accessKeyID"
+      secretAccessKey: "secretAccessKey"
+      bucketName: "cool-axum"
+      useSSL: false
+      location: "us-east-1"
+```
+
+| 模式 | 说明 |
+|------|------|
+| local | 落盘 `./public/uploads/Ymd/`，`/public/**` 静态暴露 |
+| minio | S3 兼容对象存储 |
+| oss | 阿里云 OSS（S3 兼容端点） |

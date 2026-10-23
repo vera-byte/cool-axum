@@ -1,0 +1,56 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "cool-axum",
+  "colors": {
+    "primary": "#0D9373",
+    "light": "#55D799",
+    "dark": "#0D9373"
+  },
+  "favicon": "/favicon.svg",
+  "navigation": {
+    "groups": [
+      {
+        "group": "开始",
+        "pages": [
+          "introduction",
+          "quick-start",
+          "configuration"
+        ]
+      },
+      {
+        "group": "核心能力",
+        "pages": [
+          "crud",
+          "authentication",
+          "database",
+          "modules"
+        ]
+      },
+      {
+        "group": "架构与部署",
+        "pages": [
+          "distributed",
+          "deployment"
+        ]
+      },
+      {
+        "group": "参考",
+        "pages": [
+          "api-reference",
+          "faq",
+          "changelog"
+        ]
+      }
+    ]
+  },
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/sa-tokens/sa-token-rust"
+    }
+  }
+}

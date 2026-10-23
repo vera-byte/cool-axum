@@ -1,0 +1,87 @@
+---
+title: 部署
+description: Docker Compose 与 Kubernetes
+---
+
+## Docker
+
+### 构建镜像
+
+```bash
+docker build -t cool-axum:latest .
+```
+
+多阶段构建：`rust:1.96-bookworm` 编译 → `debian:bookworm-slim` 运行。
+
+### 单实例
+
+```bash
+docker run -d --name cool-axum \
+  -p 8001:8001 \
+  -v $(pwd)/config.yaml:/app/config.yaml \
+  cool-axum:latest
+```
+
+## Docker Compose（多实例）
+
+```bash
+# 启动 mysql + redis + 应用（多副本）+ nginx
+docker compose up -d --build
+
+# 扩容应用到 3 实例
+docker compose up -d --scale cool-axum=3
+```
+
+服务组成：
+
+| 服务 | 说明 |
+|------|------|
+| mysql | 数据库（healthcheck 就绪后启动应用） |
+| redis | 共享会话 |
+| cool-axum | 应用，可 scale |
+| nginx | 负载均衡，入口 8001 |
+
+Nginx 配置见 `deploy/nginx.conf`（`least_conn` 上游转发）。
+
+## Kubernetes
+
+清单在 `deploy/k8s/deployment.yaml`：
+
+```bash
+kubectl apply -f deploy/k8s/
+```
+
+包含：
+
+- **Deployment**：`replicas: 2`，readiness/liveness 探针打 `/health`
+- **Service**：ClusterIP `:8001`
+- **HPA**：CPU 70% 扩容，2–10 副本
+
+```bash
+# 查看状态
+kubectl get pods -l app=cool-axum
+kubectl logs -l app=cool-axum -f
+```
+
+## 配置注入
+
+生产环境建议用 ConfigMap / Secret 挂载 `config.yaml`：
+
+```yaml
+env:
+  - name: COOL_CONFIG
+    value: /app/config.yaml
+volumeMounts:
+  - name: config
+    mountPath: /app/config.yaml
+    subPath: config.yaml
+```
+
+## 生产检查清单
+
+- [ ] `redis.cool` 已配置（多节点必须）
+- [ ] `cool.autoMigrate` 生产可关（用迁移脚本）
+- [ ] 数据库账号最小权限
+- [ ] `modules.base.auth.secret` 更换随机值
+- [ ] 健康检查接入 LB / K8s 探针
+- [ ] 日志级别 `info` 或 `warn`

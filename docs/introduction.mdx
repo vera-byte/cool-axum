@@ -1,0 +1,57 @@
+---
+title: 介绍
+description: cool-axum —— 基于 Axum 的 Rust 后台管理框架
+---
+
+## cool-axum 是什么
+
+**cool-axum** 是将 [cool-admin-go](https://github.com/cool-team-official/cool-admin-go)（GoFrame CRUD 后台框架）完整移植为 **Rust / Axum** 的实现。
+
+它提供：
+
+- **通用 CRUD 引擎**：定义表结构后自动获得 `add / delete / update / info / list / page` 六个标准接口
+- **登录鉴权**：基于官方 [sa-token-rust](https://github.com/sa-tokens/sa-token-rust)，支持多节点共享会话
+- **系统管理模块**：用户 / 角色 / 菜单 / 部门 / 参数 / 日志
+- **业务模块**：数据字典、定时任务、文件空间、示例模块
+- **多节点部署**：无状态应用 + Redis 会话，Docker / K8s 水平扩展
+
+## 技术栈
+
+| 组件 | 选型 |
+|------|------|
+| Web 框架 | axum 0.8 |
+| 鉴权 | sa-token-rust / sa-token-plugin-axum |
+| 数据库 | sqlx（MySQL / PostgreSQL） |
+| 会话/缓存 | Redis |
+| 文档 | Mintlify |
+
+## 与 cool-admin-go 的对应关系
+
+| cool-admin-go | cool-axum |
+|---------------|-----------|
+| `cool/`（Model/Service/Controller） | `crates/cool-core` |
+| `cool/coolconfig` | `crates/cool-config` |
+| `cool/cooldb` | `crates/cool-db` |
+| `modules/base` | `modules/base` |
+| `modules/dict` | `modules/dict` |
+| `modules/task` | `modules/task` |
+| `modules/space` | `modules/space` |
+| `modules/demo` | `modules/demo` |
+| JWT 登录鉴权 | sa-token-rust |
+
+## 快速导航
+
+<CardGroup cols={2}>
+  <Card title="快速开始" icon="rocket" href="/quick-start">
+    5 分钟跑起第一个 CRUD 接口
+  </Card>
+  <Card title="CRUD 引擎" icon="table" href="/crud">
+    六个标准接口的用法与配置
+  </Card>
+  <Card title="登录鉴权" icon="shield" href="/authentication">
+    sa-token 登录 / 权限 / 多节点会话
+  </Card>
+  <Card title="多节点部署" icon="server" href="/deployment">
+    Docker Compose 与 K8s 部署
+  </Card>
+</CardGroup>

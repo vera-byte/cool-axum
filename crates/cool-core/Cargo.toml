@@ -1,0 +1,16 @@
+[package]
+name = "cool-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+cool-config = { workspace = true }
+cool-db = { workspace = true }
+axum = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }

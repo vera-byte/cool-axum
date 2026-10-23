@@ -1,0 +1,180 @@
+---
+title: CRUD 引擎
+description: 六个标准接口与 QueryOp 查询配置
+---
+
+cool-axum 内置一套**通用 CRUD 引擎**：只要定义好表结构与 `CrudService` 配置，即可自动获得 `Add / Delete / Update / Info / List / Page` 六个标准接口。
+
+## 接口一览
+
+以 `/demo/sample` 为例：
+
+| 接口 | 方法 | 路径 | 说明 |
+|------|------|------|------|
+| Add | POST | `/demo/sample/add` | 新增，返回 `{id}` |
+| Delete | POST | `/demo/sample/delete` | 批量软删除 `{ids:[1,2]}` |
+| Update | POST | `/demo/sample/update` | 按 `id` 更新 |
+| Info | GET | `/demo/sample/info?id=1` | 详情 |
+| List | POST | `/demo/sample/list` | 列表（默认上限 10000） |
+| Page | POST | `/demo/sample/page` | 分页 |
+
+统一响应体：
+
+```json
+{ "code": 1000, "message": "success", "data": { ... } }
+```
+
+错误码：`1000` 成功、`1001` 业务失败、`51` 参数错误、`1003` 内部错误、`403` 无权限、`404` 未找到。
+
+## 定义 CrudService
+
+```rust
+use cool_core::{CrudService, QueryOp, controller::{crud_router, ApiAllow}};
+
+let svc = CrudService::new("demo_sample")
+    // 唯一键校验：字段 -> 错误提示
+    .unique_key("code", "编码已存在")
+    // 非空校验
+    .not_null_key("name", "名称不能为空")
+    // 查询结果剥离敏感字段
+    .hidden_fields(&["password"])
+    // List 查询配置
+    .list_op(
+        QueryOp::new()
+            .field_eq(&["name", "code"])          // 等值过滤
+            .key_word_field(&["name", "code"]),   // keyWord 模糊搜索字段
+    )
+    // Page 查询配置
+    .page_op(
+        QueryOp::new()
+            .field_eq(&["name", "code"])
+            .key_word_field(&["name", "code"])
+            .add_orderby("id", "desc"),           // 默认排序
+    );
+
+let router = crud_router("/demo/sample", svc, ApiAllow::default());
+```
+
+## QueryOp 查询配置
+
+| 方法 | 说明 |
+|------|------|
+| `field_eq(&["a","b"])` | 请求参数中同名字段非空时自动加 `a = ?` |
+| `key_word_field(&["a","b"])` | 请求 `keyWord` 对这些字段做 OR LIKE |
+| `add_orderby("id","desc")` | 请求未指定排序时的默认排序 |
+| `select("id,name")` | SELECT 列裁剪 |
+| `left_join("t2","t2","a.id = t2.aId")` | 关联查询 |
+| `where_sql("status = 1")` | 自定义 WHERE 片段 |
+
+## 分页请求
+
+```json
+POST /demo/sample/page
+{
+  "page": 1,
+  "size": 15,
+  "order": "id",
+  "sort": "desc",
+  "keyWord": "搜索词",
+  "name": "等值过滤",
+  "isExport": false,
+  "maxExportLimit": 0
+}
+```
+
+返回：
+
+```json
+{
+  "code": 1000,
+  "data": {
+    "list": [...],
+    "pagination": { "page": 1, "size": 15, "total": 42 }
+  }
+}
+```
+
+## Api 白名单
+
+控制开放的接口（对齐 cool-admin-go 的 `Api` 配置）：
+
+```rust
+use cool_core::controller::ApiAllow;
+
+// 默认全开
+ApiAllow::default();
+
+// 只读
+ApiAllow { add: false, delete: false, update: false, info: true, list: true, page: true };
+```
+
+未开放的接口返回 `404`。
+
+## 安全特性
+
+- **软删除**：`delete` 写 `deleteTime`，查询自动过滤 `deleteTime IS NULL`
+- **防注入**：排序字段白名单校验、标识符反引号包裹、值转义
+- **自动时间**：`createTime` / `updateTime` 自动填充
+- **保留字**：`key` / `limit` 等列名自动加引号
+
+## 覆写行为
+
+`CrudService` 目前提供开箱即用实现。业务逻辑（如改密、关联写入）在 M4 后续版本通过钩子扩展；当前可在路由层自行处理后调用 service 方法。
+
+## 代码生成器（cool-gen）
+
+对齐 cool-admin-go `cool-tools`，从数据库表一键生成 CRUD 模块代码：
+
+```bash
+# 列出全部表
+cargo run -p cool-gen -- tables
+
+# 创建模块脚手架（与 base 模块分层结构一致）
+cargo run -p cool-gen -- module report
+
+# 从表结构生成 CRUD 代码
+cargo run -p cool-gen -- crud demo_goods --module demo
+```
+
+生成产物（`target/gen/<table>/`）：
+
+| 文件 | 内容 |
+|------|------|
+| `tables.rs` | `TableDef` 完整列定义（含主键自增、默认值、注释） |
+| `lib.rs` | `CrudService` + `crud_router` 路由片段 |
+
+生成代码风格与手写模块一致，可直接合并到 `modules/<module>/`。
+
+### 列映射规则
+
+| 数据库 | 生成结果 |
+|--------|----------|
+| 主键 / auto_increment | `primary_key: true, auto_increment: true` |
+| NOT NULL | `not_null: true` |
+| DEFAULT x | `col_def(..., "x")` |
+| COLUMN_COMMENT | `comment` |
+| `deleted_at` | 规范化为 `deleteTime` |
+
+### module 生成结构
+
+`cool-gen module <name>` 生成与 `modules/base` 一致的分层目录：
+
+```text
+{name}/
+├── Cargo.toml
+├── initjson/                      # 种子数据
+└── src/
+    ├── api/{mod,v1}.rs            # 请求 DTO
+    ├── config/mod.rs              # 模块配置
+    ├── controller/
+    │   ├── mod.rs
+    │   ├── admin/{mod,{name}_item}.rs   # CRUD 控制器
+    │   └── app/mod.rs
+    ├── funcs/mod.rs               # 任务函数
+    ├── middleware/mod.rs          # 模块中间件
+    ├── model/{mod,{name}_item,initjson}.rs
+    ├── service/{mod,{name}_item}.rs
+    └── utils/mod.rs
+```
+
+生成代码可直接编译；接入步骤见命令输出。

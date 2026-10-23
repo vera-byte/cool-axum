@@ -1,0 +1,49 @@
+server:
+  address: ":8001"
+  openapiPath: "/api.json"
+  swaggerPath: "/swagger"
+  clientMaxBodySize: 104857600
+
+logger:
+  level: "info"
+  stdout: true
+
+database:
+  default:
+    type: "mysql"
+    host: "127.0.0.1"
+    port: "3306"
+    user: "root"
+    pass: "123456"
+    name: "cooltest"
+    charset: "utf8mb4"
+    timezone: "Asia/Shanghai"
+    debug: true
+    createdAt: "createTime"
+    updatedAt: "updateTime"
+    deletedAt: "deleteTime"
+
+redis:
+  cool:
+    address: "127.0.0.1:6379"
+    db: 0
+
+cool:
+  autoMigrate: true
+  eps: true
+  file:
+    mode: "local"
+    domain: "http://127.0.0.1:8001"
+
+modules:
+  base:
+    auth:
+      sso: false
+      secret: "cool-base88776655"
+      tokenExpire: 36000
+      refreshExpire: 1296000
+    middleware:
+      authority:
+        enable: true
+      log:
+        enable: true
