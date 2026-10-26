@@ -67,6 +67,7 @@ pub fn build_router<S>(
     state: S,
     sa: sa_token_plugin_axum::SaTokenState,
     extra_open: Router<S>,
+    tenant_policy: cool_core::tenant::TenantPolicy,
 ) -> Router
 where
     S: cool_core::CrudState
@@ -93,8 +94,15 @@ where
     let static_files = tower_http::services::ServeDir::new("./public");
     let open = open.nest_service("/public", static_files);
 
-    // biz：登录 + 权限点（超管 userId=1 / perms=* 放行）
+    // biz：登录 + 权限点 + 多租户隔离
     let biz = biz
+        .layer(axum::middleware::from_fn_with_state(
+            mod_base::middleware::TenantLayerState {
+                app: state.clone(),
+                policy: tenant_policy,
+            },
+            mod_base::middleware::tenant_middleware,
+        ))
         .layer(axum::middleware::from_fn(
             mod_base::authority::authority_middleware,
         ))
@@ -107,5 +115,9 @@ where
             mod_base::middleware::normalize_token_header,
         ))
         .layer(axum::middleware::from_fn(mod_base::middleware::request_log))
+        // 链路追踪最外层：生成 X-Trace-Id（含节点）并写响应头
+        .layer(axum::middleware::from_fn(
+            mod_base::middleware::trace_id_middleware,
+        ))
         .with_state(state)
 }

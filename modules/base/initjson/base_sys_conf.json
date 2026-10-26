@@ -1,0 +1,50 @@
+[
+  {
+    "id": 1,
+    "createTime": "2026-10-26 23:24:25",
+    "updateTime": "2026-10-26 23:24:25",
+    "tenantId": null,
+    "cKey": "logKeep",
+    "cValue": "31"
+  },
+  {
+    "id": 2,
+    "createTime": "2026-10-26 23:24:25",
+    "updateTime": "2026-10-26 23:24:25",
+    "tenantId": null,
+    "cKey": "recycleKeep",
+    "cValue": "31"
+  },
+  {
+    "id": 3,
+    "createTime": "2026-10-26 23:24:25",
+    "updateTime": "2026-10-26 23:24:25",
+    "tenantId": null,
+    "cKey": "init_db_base",
+    "cValue": "time consuming：63ms"
+  },
+  {
+    "id": 4,
+    "createTime": "2026-10-26 23:24:25",
+    "updateTime": "2026-10-26 23:24:25",
+    "tenantId": null,
+    "cKey": "init_db_dict",
+    "cValue": "time consuming：32ms"
+  },
+  {
+    "id": 5,
+    "createTime": "2026-10-26 23:24:25",
+    "updateTime": "2026-10-26 23:24:25",
+    "tenantId": null,
+    "cKey": "init_db_task",
+    "cValue": "time consuming：7ms"
+  },
+  {
+    "id": 6,
+    "createTime": "2026-10-26 23:24:25",
+    "updateTime": "2026-10-26 23:24:25",
+    "tenantId": null,
+    "cKey": "init_menu_base",
+    "cValue": "success"
+  }
+]

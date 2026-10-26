@@ -18,6 +18,9 @@ pub struct ServerConfig {
     /// 监听地址，如 ":8001"
     #[serde(default = "default_address")]
     pub address: String,
+    /// 自定义节点标签（X-Node-Label / 链路 ID 前缀），默认 `{nodeId}@{port}`
+    #[serde(default)]
+    pub node_label: Option<String>,
     #[serde(default = "default_openapi_path")]
     pub openapi_path: String,
     #[serde(default = "default_swagger_path")]
@@ -43,14 +46,45 @@ fn default_max_body() -> usize {
 /// logger 节
 #[derive(Debug, Clone, Deserialize)]
 pub struct LoggerConfig {
+    /// 日志级别：trace/debug/info/warn/error
     #[serde(default = "default_log_level")]
     pub level: String,
+    /// 输出格式：text | json
+    #[serde(default = "default_log_format")]
+    pub format: String,
     #[serde(default = "default_true")]
     pub stdout: bool,
+    /// 文件输出（可选，按大小轮转）
+    #[serde(default)]
+    pub file: Option<LogFileConfig>,
+}
+
+/// 日志文件配置（按大小轮转）
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LogFileConfig {
+    /// 日志文件路径，如 ./logs/cool-axum.log
+    pub path: String,
+    /// 单文件最大字节数（默认 10MB）
+    #[serde(default = "default_log_max_size")]
+    pub max_size: u64,
+    /// 轮转保留个数（含当前文件，默认 5）
+    #[serde(default = "default_log_max_files")]
+    pub max_files: usize,
+}
+
+fn default_log_max_size() -> u64 {
+    10 * 1024 * 1024
+}
+fn default_log_max_files() -> usize {
+    5
 }
 
 fn default_log_level() -> String {
     "info".into()
+}
+fn default_log_format() -> String {
+    "text".into()
 }
 fn default_true() -> bool {
     true
@@ -136,6 +170,21 @@ pub struct CoolConfig {
     pub eps: bool,
     #[serde(default)]
     pub file: FileConfig,
+    /// 多租户（v8.0，对齐 cool-admin-midway）
+    #[serde(default)]
+    pub tenant: TenantConfig,
+}
+
+/// 多租户配置
+#[derive(Debug, Clone, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct TenantConfig {
+    /// 是否开启多租户数据隔离
+    #[serde(default)]
+    pub enable: bool,
+    /// 需要过滤多租户的 url，支持 `*` / `**` 通配（如 `/admin/**`）
+    #[serde(default)]
+    pub urls: Vec<String>,
 }
 
 /// 文件上传配置
@@ -316,6 +365,7 @@ impl Default for ServerConfig {
     fn default() -> Self {
         Self {
             address: default_address(),
+            node_label: None,
             openapi_path: default_openapi_path(),
             swagger_path: default_swagger_path(),
             client_max_body_size: default_max_body(),
@@ -327,7 +377,9 @@ impl Default for LoggerConfig {
     fn default() -> Self {
         Self {
             level: default_log_level(),
+            format: default_log_format(),
             stdout: default_true(),
+            file: None,
         }
     }
 }

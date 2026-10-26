@@ -23,6 +23,12 @@ pub async fn request_log(req: Request, next: Next) -> Response {
     let method = req.method().clone();
     let path = req.uri().path().to_string();
     let query = req.uri().query().map(|s| s.to_string()).unwrap_or_default();
+    let trace = req
+        .extensions()
+        .get::<crate::middleware::trace::TraceId>()
+        .map(|t| t.0.clone())
+        .or_else(|| crate::middleware::trace::trace_from_headers(req.headers()))
+        .unwrap_or_default();
     let (parts, _body) = req.into_parts();
     let headers = parts.headers.clone();
     let ip_ext = client_ip_from_ext(&parts);
@@ -34,11 +40,11 @@ pub async fn request_log(req: Request, next: Next) -> Response {
     let status = res.status().as_u16();
     let cost = start.elapsed().as_millis();
 
-    // 控制台日志
+    // 控制台日志（含链路 ID；node= 由全局日志格式注入）
     if status >= 400 {
-        tracing::warn!(%method, path, status, cost_ms = cost, "request");
+        tracing::warn!(%method, path, status, cost_ms = cost, %trace, "request");
     } else {
-        tracing::info!(%method, path, status, cost_ms = cost, "request");
+        tracing::info!(%method, path, status, cost_ms = cost, %trace, "request");
     }
 
     // 落库（仅业务接口；跳过健康检查/静态资源）
@@ -54,7 +60,13 @@ pub async fn request_log(req: Request, next: Next) -> Response {
             tokio::spawn(async move {
                 let uid = resolve_user_id(&headers).await.unwrap_or(0);
                 let action_esc = action.replace('\'', "''");
-                let params_esc = params.replace('\'', "''");
+                // params 前缀链路 ID，便于 DB 侧按 trace 检索
+                let params_full = if trace.is_empty() {
+                    params
+                } else {
+                    format!("trace={trace}&{params}")
+                };
+                let params_esc = params_full.replace('\'', "''");
                 let ip_esc = ip.replace('\'', "''");
                 let sql = format!(
                     "INSERT INTO `base_sys_log` (createTime, updateTime, userId, action, ip, ipAddr, params) \
@@ -63,7 +75,7 @@ pub async fn request_log(req: Request, next: Next) -> Response {
                 if let Ok(pool) = db.default_pool()
                     && let Err(e) = pool.execute(&sql).await
                 {
-                    tracing::error!(error = %e, "操作日志写入失败");
+                    tracing::error!(error = %e, %trace, "操作日志写入失败");
                 }
             });
         }

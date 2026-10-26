@@ -128,10 +128,11 @@ impl RaftNetworkV2<TypeConfig> for HttpConnection {
 
 #[derive(Clone)]
 pub struct RaftRpcState {
-    pub raft: crate::Raft,
+    /// None = Raft 未启用或启动失败（仍须挂载 RPC 路由，避免对端收到 401）
+    pub raft: Option<crate::Raft>,
 }
 
-/// RPC 路由：挂载 /raft/*
+/// RPC 路由：挂载 /raft/*（必须在开放路由组，免鉴权）
 pub fn raft_routes<S>(rpc: RaftRpcState) -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
@@ -147,7 +148,10 @@ async fn vote(
     State(st): State<RaftRpcState>,
     Json(req): Json<VoteRequest<TypeConfig>>,
 ) -> Json<Result<VoteResponse<TypeConfig>, String>> {
-    match st.raft.vote(req).await {
+    let Some(raft) = &st.raft else {
+        return Json(Err("Raft 未启用或启动失败".into()));
+    };
+    match raft.vote(req).await {
         Ok(r) => Json(Ok(r)),
         Err(e) => Json(Err(e.to_string())),
     }
@@ -157,7 +161,10 @@ async fn append(
     State(st): State<RaftRpcState>,
     Json(req): Json<AppendEntriesRequest<TypeConfig>>,
 ) -> Json<Result<AppendEntriesResponse<TypeConfig>, String>> {
-    match st.raft.append_entries(req).await {
+    let Some(raft) = &st.raft else {
+        return Json(Err("Raft 未启用或启动失败".into()));
+    };
+    match raft.append_entries(req).await {
         Ok(r) => Json(Ok(r)),
         Err(e) => Json(Err(e.to_string())),
     }

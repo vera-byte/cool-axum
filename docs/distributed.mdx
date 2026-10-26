@@ -90,7 +90,7 @@ raft:
 | `enable: true` | 仅 **有效 Leader** 执行任务；其余节点跳过本轮 |
 | `peers` | `id:addr` 列表，addr 为该节点 HTTP API 地址 |
 | `nodeId` / `selfAddr` | 本节点身份与地址，需与 peers 中自己的条目一致 |
-| `dataDir` | RocksDB 落盘目录（日志 / vote / applied-state），默认 `./data/raft` |
+| `dataDir` | RocksDB 落盘根目录，默认 `./data/raft`；**实际使用 `dataDir/n{nodeId}`**，多节点即使配置相同也不会抢锁 |
 
 各节点配置**同一集群成员表**，`nodeId` / `selfAddr` / `dataDir` 各不相同。首次启动由**最小节点 ID** 的节点一次性 `initialize(全体 voter)` 完成 bootstrap；**重启后从 RocksDB 恢复，自动跳过 bootstrap**。
 
@@ -118,6 +118,9 @@ Leader + 失去多数派 ──► 停止执行（等待重新获选）
 | GET | `/raft/status` | — | 节点角色、Leader、term、日志位点、peers |
 | POST | `/raft/add-learner` | `{"id":2,"addr":"http://..."}` | 添加学习者（无投票权） |
 | POST | `/raft/change-membership` | `{"members":[1,2,3]}` | 变更投票成员 |
+
+> 管理操作须由 **Leader** 执行：请求打到 Follower 时自动转发到 Leader。
+> 转发会透传 `X-Trace-Id`，响应回写**客户端原始**链路 ID，并以 `X-Served-Node` 标注实际处理节点。详见 [API 参考 · 链路追踪](/api-reference#链路追踪)。
 
 Raft RPC（节点间，免鉴权，须开放）：
 
@@ -169,8 +172,12 @@ Raft 状态落在 `dataDir`（RocksDB）：
 
 ```
 data/raft/
-├── log/    # 日志 + vote + committed 位点（RocksLogStore）
-└── sm/     # applied-state：last_log_id + membership（RocksStateMachine）
+├── n1/          # 节点 1（按 nodeId 自动隔离）
+│   ├── log/     # 日志 + vote + committed 位点（RocksLogStore）
+│   └── sm/      # applied-state：last_log_id + membership（RocksStateMachine）
+└── n2/
+    ├── log/
+    └── sm/
 ```
 
 - 进程重启后从磁盘恢复，不丢 vote / 日志 / applied 位点
@@ -210,7 +217,8 @@ membership:  {1, 2, 3}
 | 快照传输 | 入站 `/raft/snapshot` 暂未实现（状态机极小，仅选主；本地快照可构建） |
 | 成员变更 | 手动调用管理 API，无自动发现 |
 | 启动失败回退 | Raft 启动失败时记 error 并退回单机模式（任务本地执行） |
-| dataDir 备份 | 节点本地磁盘；多副本各自持久化，无需共享盘 |
+| RPC 路由 | `/raft/vote\|append\|snapshot` 始终挂在开放组；未启用/失败时返回明确错误而非 401 |
+| dataDir | 自动按 `n{nodeId}` 隔离，多进程可共用同一配置根目录 |
 
 ## 无状态约定
 

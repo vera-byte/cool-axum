@@ -31,6 +31,7 @@ pub fn dict_type() -> TableDef {
             col("createTime", "datetime", true, "创建时间"),
             col("updateTime", "datetime", true, "更新时间"),
             col("deleteTime", "datetime", false, "删除时间"),
+            col("tenantId", "bigint", false, "租户ID"),
             col("name", "varchar(255)", true, "名称"),
             col("key", "varchar(255)", true, "标识"),
         ],

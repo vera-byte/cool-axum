@@ -45,13 +45,15 @@ fn col_def(
     }
 }
 
-/// 公共基础列：id / createTime / updateTime / deleteTime
+/// 公共基础列：id / createTime / updateTime / deleteTime / tenantId
+/// 对齐 cool-admin-midway BaseEntity（tenantId 为多租户隔离列）
 pub fn base_cols() -> Vec<cool_db::ColumnMeta> {
     vec![
         col("id", "bigint", true, true, "主键"),
         col("createTime", "datetime", true, false, "创建时间"),
         col("updateTime", "datetime", true, false, "更新时间"),
         col("deleteTime", "datetime", false, false, "删除时间"),
+        col("tenantId", "bigint", false, false, "租户ID"),
     ]
 }
 
@@ -70,6 +72,7 @@ pub fn base_sys_user() -> TableDef {
         "base_sys_user",
         vec![
             col("departmentId", "bigint", false, false, "部门ID"),
+            col("userId", "bigint", false, false, "创建者ID"),
             col("name", "varchar(255)", false, false, "姓名"),
             col("username", "varchar(100)", true, false, "用户名"),
             col("password", "varchar(255)", true, false, "密码"),
@@ -95,6 +98,8 @@ pub fn base_sys_role() -> TableDef {
             col("label", "varchar(50)", false, false, "角色标签"),
             col("remark", "varchar(255)", false, false, "备注"),
             col_def("relevance", "int", true, "数据权限是否关联上下级", "1"),
+            col("menuIdList", "text", false, false, "菜单权限"),
+            col("departmentIdList", "text", false, false, "部门权限"),
         ],
     )
 }
@@ -125,7 +130,19 @@ pub fn base_sys_department() -> TableDef {
         vec![
             col("name", "varchar(255)", true, false, "部门名称"),
             col("parentId", "bigint", false, false, "上级部门ID"),
+            col("userId", "bigint", false, false, "负责人ID"),
             col("orderNum", "int", true, false, "排序"),
+        ],
+    )
+}
+
+/// base_sys_conf（对齐 midway BaseSysConfEntity）
+pub fn base_sys_conf() -> TableDef {
+    table(
+        "base_sys_conf",
+        vec![
+            col("cKey", "varchar(255)", true, false, "配置键"),
+            col("cValue", "text", false, false, "配置值"),
         ],
     )
 }
@@ -209,5 +226,6 @@ pub fn all_tables() -> Vec<TableDef> {
         base_sys_user_role(),
         base_sys_role_menu(),
         base_sys_role_department(),
+        base_sys_conf(),
     ]
 }

@@ -94,9 +94,14 @@ pub fn routes<S: cool_core::CrudState>() -> Router<S> {
                 .key_word_field(&["name"]),
         );
 
-    Router::new()
-        .merge(crud_router("/space/info", info, ApiAllow::default()))
-        .merge(crud_router("/space/type", ty, ApiAllow::default()))
+    let mut r = Router::new();
+    for prefix in ["/space/info", "/admin/space/info"] {
+        r = r.merge(crud_router(prefix, info.clone(), ApiAllow::default()));
+    }
+    for prefix in ["/space/type", "/admin/space/type"] {
+        r = r.merge(crud_router(prefix, ty.clone(), ApiAllow::default()));
+    }
+    r
 }
 
 /// 模块注册声明：业务表

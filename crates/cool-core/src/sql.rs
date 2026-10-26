@@ -337,6 +337,7 @@ impl SqlBuilder {
         data: &serde_json::Map<String, serde_json::Value>,
         id: i64,
         soft_delete_col: Option<&str>,
+        tenant_id: Option<i64>,
     ) -> String {
         let mut sets = Vec::new();
         for (k, v) in data {
@@ -359,22 +360,34 @@ impl SqlBuilder {
         {
             let _ = write!(sql, " AND {} IS NULL", quote_ident(col));
         }
+        if let Some(t) = tenant_id {
+            let _ = write!(sql, " AND `tenantId` = {t}");
+        }
         sql
     }
 
     /// 软删除：UPDATE deleteTime = now
-    pub fn build_soft_delete(table: &str, ids: &[i64], soft_delete_col: &str) -> Option<String> {
+    pub fn build_soft_delete(
+        table: &str,
+        ids: &[i64],
+        soft_delete_col: &str,
+        tenant_id: Option<i64>,
+    ) -> Option<String> {
         if ids.is_empty() || !is_safe_ident(soft_delete_col) {
             return None;
         }
         let list: Vec<String> = ids.iter().map(|i| i.to_string()).collect();
-        Some(format!(
+        let mut sql = format!(
             "UPDATE {} SET {} = CURRENT_TIMESTAMP WHERE `id` IN ({}) AND {} IS NULL",
             quote_ident(table),
             quote_ident(soft_delete_col),
             list.join(","),
             quote_ident(soft_delete_col)
-        ))
+        );
+        if let Some(t) = tenant_id {
+            let _ = write!(sql, " AND `tenantId` = {t}");
+        }
+        Some(sql)
     }
 }
 

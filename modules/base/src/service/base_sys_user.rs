@@ -94,3 +94,17 @@ pub fn user_json(u: &LoginUser) -> Value {
         "passwordV": u.password_v,
     })
 }
+
+/// person / userinfo：整行除 password（对齐 Go `FieldsEx("password")`）
+pub async fn person_json(db: &DbManager, user_id: i64) -> Option<Value> {
+    let pool = db.default_pool().ok()?;
+    let sql = format!(
+        "SELECT * FROM `base_sys_user` WHERE id = {user_id} AND deleteTime IS NULL LIMIT 1"
+    );
+    let mut rows = query_rows_on(pool, &sql).await.ok()?;
+    let mut row = rows.pop()?;
+    if let Value::Object(map) = &mut row {
+        map.remove("password");
+    }
+    Some(row)
+}

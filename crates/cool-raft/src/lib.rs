@@ -66,6 +66,17 @@ impl Cluster {
         self.raft.current_leader().await
     }
 
+    /// 当前 Leader 的 API 地址（未知则 None）
+    pub async fn leader_addr(&self) -> Option<String> {
+        let id = self.leader().await?;
+        self.peers.lock().await.get(&id).cloned()
+    }
+
+    /// 本节点是否为 Leader
+    pub async fn is_leader_node(&self) -> bool {
+        self.leader().await == Some(self.node_id)
+    }
+
     /// 节点角色
     pub fn role(&self) -> &'static str {
         match self.raft.metrics().borrow_watched().state {
@@ -150,8 +161,14 @@ pub async fn start(
     let log_dir = data_dir.join("log");
     let sm_dir = data_dir.join("sm");
     tracing::info!(node_id, data_dir = %data_dir.display(), "Raft 使用 RocksDB 持久化存储");
-    let log_store =
-        LogStore::open(&log_dir).map_err(|e| anyhow::anyhow!("打开 Raft 日志库失败: {e}"))?;
+    let log_store = LogStore::open(&log_dir).map_err(|e| {
+        let hint = if e.to_string().contains("lock") || e.to_string().contains("LOCK") {
+            "（RocksDB 目录被其他进程占用：请确认每个节点使用独立 dataDir）"
+        } else {
+            ""
+        };
+        anyhow::anyhow!("打开 Raft 日志库失败: {e}{hint}")
+    })?;
     let state_machine =
         StateMachine::open(&sm_dir).map_err(|e| anyhow::anyhow!("打开 Raft 状态机失败: {e}"))?;
 
@@ -193,4 +210,79 @@ pub async fn start(
         raft,
         peers: peer_map,
     })
+}
+
+/// 将请求转发到 Leader（管理操作须经 Leader）
+///
+/// - 透传 `X-Trace-Id` 等链路头
+/// - 响应侧由调用方还原**原始** trace id
+pub async fn forward_to_leader(
+    leader_addr: &str,
+    method: &str,
+    path: &str,
+    query: Option<&str>,
+    headers: &axum::http::HeaderMap,
+    body: Vec<u8>,
+) -> Result<(u16, axum::http::HeaderMap, Vec<u8>), String> {
+    use axum::http::{HeaderName, HeaderValue, Method};
+
+    let mut url = format!("{}{}", leader_addr.trim_end_matches('/'), path);
+    if let Some(q) = query.filter(|q| !q.is_empty()) {
+        url.push('?');
+        url.push_str(q);
+    }
+
+    let method = match method.to_uppercase().as_str() {
+        "GET" => Method::GET,
+        "POST" => Method::POST,
+        "PUT" => Method::PUT,
+        "DELETE" => Method::DELETE,
+        "PATCH" => Method::PATCH,
+        other => return Err(format!("不支持的转发方法: {other}")),
+    };
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut rb = client.request(method, &url);
+    // 透传链路与内容头（去掉 hop-by-hop / host）
+    for (k, v) in headers.iter() {
+        let name = k.as_str().to_ascii_lowercase();
+        if matches!(
+            name.as_str(),
+            "host" | "connection" | "content-length" | "transfer-encoding" | "accept-encoding"
+        ) {
+            continue;
+        }
+        if let Ok(v) = v.to_str() {
+            rb = rb.header(name.as_str(), v);
+        }
+    }
+    if !body.is_empty() {
+        rb = rb.body(body);
+    }
+
+    let resp = rb.send().await.map_err(|e| format!("转发 Leader 失败: {e}"))?;
+    let status = resp.status().as_u16();
+    let mut out_headers = axum::http::HeaderMap::new();
+    for (k, v) in resp.headers().iter() {
+        if let (Ok(kn), Ok(vv)) = (
+            HeaderName::from_bytes(k.as_str().as_bytes()),
+            HeaderValue::from_bytes(v.as_bytes()),
+        ) {
+            // 不回传 hop-by-hop
+            let name = kn.as_str().to_ascii_lowercase();
+            if matches!(
+                name.as_str(),
+                "connection" | "transfer-encoding" | "content-length"
+            ) {
+                continue;
+            }
+            out_headers.insert(kn, vv);
+        }
+    }
+    let body = resp.bytes().await.map_err(|e| e.to_string())?.to_vec();
+    Ok((status, out_headers, body))
 }

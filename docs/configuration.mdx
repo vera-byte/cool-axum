@@ -10,20 +10,88 @@ description: config.yaml 全量配置项
 ```yaml
 server:
   address: ":8001"              # 监听地址
+  nodeLabel: "bj-node-1"        # 可选：自定义节点标签（X-Node-Label / 链路 ID 前缀）
   openapiPath: "/api.json"      # OpenAPI 导出路径
   swaggerPath: "/swagger"       # Swagger 路径
   clientMaxBodySize: 104857600  # 最大 body（默认 100MB）
 ```
 
+| 字段 | 默认 | 说明 |
+|------|------|------|
+| `address` | `:8001` | 监听地址 |
+| `nodeLabel` | 未设置 | 节点标签；未设置时用 `{nodeId}@{port}`（nodeId 来自 `raft.nodeId`） |
+
+`nodeLabel` 会出现在响应头 `X-Node-Label` 与链路 ID 前缀中，便于多节点下辨识请求落到哪台机器，见 [API 参考 · 链路追踪](/api-reference#链路追踪)。
+
 ## logger
 
 ```yaml
 logger:
-  level: "info"   # trace/debug/info/warn/error
+  level: "info"     # trace | debug | info | warn | error
+  format: "text"    # text | json
   stdout: true
+  # 文件输出（可选，按大小轮转）
+  file:
+    path: "./logs/cool-axum.log"
+    maxSize: 10485760   # 单文件最大字节，默认 10MB
+    maxFiles: 5         # 轮转保留个数（含当前），默认 5
 ```
 
-也可用 `RUST_LOG` 环境变量覆盖。
+| 字段 | 默认 | 说明 |
+|------|------|------|
+| `level` | `info` | 日志级别；`RUST_LOG` 环境变量可覆盖 |
+| `format` | `text` | 输出格式，见下 |
+| `stdout` | `true` | 输出到标准输出 |
+| `file` | 未启用 | 文件输出；配置 `file.path` 即开启 |
+
+### file：文件输出与按大小轮转
+
+| 字段 | 默认 | 说明 |
+|------|------|------|
+| `path` | — | 日志文件路径（必填才会开启文件输出） |
+| `maxSize` | `10485760`（10MB） | 写满后轮转 |
+| `maxFiles` | `5` | 保留轮转份数（含当前文件） |
+
+轮转规则：
+
+```
+cool-axum.log      ← 当前写入
+cool-axum.log.1    ← 上一份
+cool-axum.log.2
+cool-axum.log.3
+cool-axum.log.4    ← 最旧（超出 maxFiles 删除）
+```
+
+- `stdout: true` 且配置了 `file` 时，**同时**输出到控制台与文件
+- `stdout: false` 时只写文件（适合生产）
+
+### format = text（默认）
+
+人读友好，**每行**含节点标识：
+
+```
+2026-10-26T16:35:56.799Z INFO node=text-node cool-axum 启动中... address=":8002"
+2026-10-26T16:35:59.365Z INFO node=text-node request method=GET path="/health" status=200 cost_ms=1 trace=text-node-abc123
+```
+
+### format = json
+
+结构化，便于 ELK / Loki 采集；每条含 `timestamp` / `level` / `node` / `message` / 业务字段：
+
+```json
+{"timestamp":"2026-10-26T16:35:57.389Z","level":"INFO","node":"json-node","message":"cool-axum 已启动，监听 0.0.0.0:8002"}
+{"timestamp":"2026-10-26T16:35:59.365Z","level":"INFO","node":"json-node","message":"request","method":"GET","path":"/health","status":200,"cost_ms":"2","trace":"json-node-79119b02ccf3bc4f"}
+```
+
+级别说明：
+
+| level | 典型内容 |
+|-------|----------|
+| `error` | 启动失败、种子插入失败、日志落库失败 |
+| `warn` | HTTP ≥400、Raft 复制告警、降级回退 |
+| `info` | 启动流程、请求日志、任务调度、Raft 状态 |
+| `debug` | SQL、路由注册、模块 init、种子跳过 |
+| `trace` | 最细粒度（一般不开） |
 
 ## database
 

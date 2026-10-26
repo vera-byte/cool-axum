@@ -45,6 +45,13 @@ impl mod_base::comm::FileState for AppState {
 }
 
 pub async fn serve(config: AppConfig) -> anyhow::Result<()> {
+    // 链路节点身份：X-Trace-Id 前缀 / X-Node-Label
+    mod_base::middleware::init_node(
+        config.raft.node_id,
+        &normalize_addr(&config.server.address),
+        config.server.node_label.as_deref(),
+    );
+
     // 初始化数据源
     let db = DbManager::init(&config.database)
         .await
@@ -104,7 +111,12 @@ pub async fn serve(config: AppConfig) -> anyhow::Result<()> {
     };
 
     // Raft 集群（可选）：启用后用于选主，Leader 执行定时任务
+    // dataDir 按节点隔离（dataDir/n{nodeId}），避免多节点抢 RocksDB 锁
     let raft = if config.raft.enable {
+        if let Err(e) = validate_raft_config(&config) {
+            tracing::error!(error = e, "Raft 配置校验失败，继续单机模式");
+            None
+        } else {
         let peers: Vec<(cool_raft::NodeId, String)> = config
             .raft
             .peers
@@ -116,11 +128,14 @@ pub async fn serve(config: AppConfig) -> anyhow::Result<()> {
                 Some((id, addr))
             })
             .collect();
+        let data_dir = std::path::PathBuf::from(&config.raft.data_dir)
+            .join(format!("n{}", config.raft.node_id));
+        tracing::info!(node_id = config.raft.node_id, data_dir = %data_dir.display(), "Raft 节点数据目录");
         match cool_raft::start(
             config.raft.node_id,
             config.raft.self_addr.clone(),
             peers,
-            std::path::PathBuf::from(&config.raft.data_dir),
+            data_dir,
             None,
         )
         .await
@@ -149,6 +164,7 @@ pub async fn serve(config: AppConfig) -> anyhow::Result<()> {
                 None
             }
         }
+        }
     } else {
         tracing::info!("Raft 未启用（单机模式，任务本地执行）");
         None
@@ -176,17 +192,25 @@ pub async fn serve(config: AppConfig) -> anyhow::Result<()> {
             axum::routing::post(raft_membership),
         );
 
-    // Raft RPC 入站路由（/raft/vote|append|snapshot），必须免鉴权
-    if let Some(c) = &state.raft {
-        extra_open = extra_open.merge(cool_raft::network::raft_routes(
-            cool_raft::network::RaftRpcState {
-                raft: c.raft.clone(),
-            },
-        ));
-    }
+    // Raft RPC 入站路由（/raft/vote|append|snapshot）必须始终挂载在开放组：
+    // 未启用/启动失败时返回明确错误，避免对端收到 401 无法选举
+    extra_open = extra_open.merge(cool_raft::network::raft_routes(
+        cool_raft::network::RaftRpcState {
+            raft: state.raft.as_ref().map(|c| c.raft.clone()),
+        },
+    ));
 
     // 业务路由由 modules 注册中心自动装配
-    let app = modules::build_router(state.clone(), state.sa.clone(), extra_open);
+    let tenant_policy = cool_core::tenant::TenantPolicy {
+        enable: state.config.cool.tenant.enable,
+        urls: state.config.cool.tenant.urls.clone(),
+    };
+    let app = modules::build_router(
+        state.clone(),
+        state.sa.clone(),
+        extra_open,
+        tenant_policy,
+    );
 
     let addr = normalize_addr(&config.server.address);
     let listener = tokio::net::TcpListener::bind(&addr)
@@ -212,6 +236,51 @@ fn normalize_addr(addr: &str) -> String {
     }
 }
 
+/// Raft 配置自检：避免多节点误用同一 nodeId / 端口错配
+fn validate_raft_config(config: &AppConfig) -> Result<(), String> {
+    let nid = config.raft.node_id;
+    let self_addr = config.raft.self_addr.trim().trim_end_matches('/');
+    if self_addr.is_empty() {
+        return Err("raft.selfAddr 不能为空".into());
+    }
+
+    // selfAddr 端口须与 server.address 一致（否则对端连不上本节点）
+    let listen = config.server.address.trim_start_matches(':');
+    let self_port = self_addr.rsplit(':').next().unwrap_or("");
+    if !listen.is_empty() && !self_port.is_empty() && listen != self_port {
+        return Err(format!(
+            "raft.selfAddr 端口 ({self_port}) 与 server.address 端口 ({listen}) 不一致，             多节点请为每个进程单独配置 nodeId/selfAddr/server.address"
+        ));
+    }
+
+    // peers 中必须有本节点，且 id 与 nodeId 一致
+    let mut peer_ids = std::collections::HashSet::new();
+    let mut self_listed = false;
+    for p in &config.raft.peers {
+        let mut it = p.splitn(2, ':');
+        let id: u64 = it
+            .next()
+            .and_then(|x| x.parse().ok())
+            .ok_or_else(|| format!("peers 条目格式应为 id:addr，收到 {p}"))?;
+        let addr = it.next().unwrap_or("").trim_end_matches('/');
+        if !peer_ids.insert(id) {
+            return Err(format!("peers 中 nodeId={id} 重复"));
+        }
+        if id == nid {
+            self_listed = true;
+            if addr != self_addr {
+                return Err(format!(
+                    "peers 中 nodeId={nid} 的地址 ({addr}) 与 selfAddr ({self_addr}) 不一致"
+                ));
+            }
+        }
+    }
+    if !config.raft.peers.is_empty() && !self_listed {
+        return Err(format!("peers 中缺少本节点 nodeId={nid}（当前 selfAddr={self_addr}）"));
+    }
+    Ok(())
+}
+
 /// autoMigrate：按配置创建全部模块表（IF NOT EXISTS）
 async fn auto_migrate(db: &DbManager) {
     let Ok(pool) = db.default_pool() else {
@@ -234,6 +303,10 @@ async fn auto_migrate(db: &DbManager) {
                 fail += 1;
                 tracing::error!(table = %def.name, error = %e, "autoMigrate 建表失败");
             }
+        }
+        // 旧表补列（如新增 tenantId）
+        if let Err(e) = cool_db::ensure_columns(pool, kind, def).await {
+            tracing::warn!(table = %def.name, error = %e, "autoMigrate 同步列失败");
         }
     }
     tracing::info!(ok, fail, "autoMigrate 完成");
@@ -303,18 +376,15 @@ struct LearnerReq {
     addr: String,
 }
 
-/// POST /raft/add-learner —— 添加学习者
+/// POST /raft/add-learner —— 添加学习者（非 Leader 自动转发到 Leader）
 async fn raft_add_learner(
     axum::extract::State(state): axum::extract::State<AppState>,
-    Json(req): Json<LearnerReq>,
-) -> Json<BaseRes> {
-    match &state.raft {
-        Some(c) => match c.add_learner(req.id, req.addr).await {
-            Ok(()) => Json(ok(serde_json::json!({"ok": true}))),
-            Err(e) => Json(cool_core::response::fail(e)),
-        },
-        None => Json(cool_core::response::fail("Raft 未启用")),
-    }
+    req: axum::extract::Request,
+) -> axum::response::Response {
+    forward_or_run_raft_admin(state, req, |c, body: LearnerReq| async move {
+        c.add_learner(body.id, body.addr).await
+    })
+    .await
 }
 
 #[derive(serde::Deserialize)]
@@ -322,16 +392,156 @@ struct MembershipReq {
     members: Vec<u64>,
 }
 
-/// POST /raft/change-membership —— 变更成员
+/// POST /raft/change-membership —— 变更成员（非 Leader 自动转发到 Leader）
 async fn raft_membership(
     axum::extract::State(state): axum::extract::State<AppState>,
-    Json(req): Json<MembershipReq>,
-) -> Json<BaseRes> {
-    match &state.raft {
-        Some(c) => match c.change_membership(req.members).await {
-            Ok(()) => Json(ok(serde_json::json!({"ok": true}))),
+    req: axum::extract::Request,
+) -> axum::response::Response {
+    forward_or_run_raft_admin(state, req, |c, body: MembershipReq| async move {
+        c.change_membership(body.members).await
+    })
+    .await
+}
+
+/// Raft 管理操作：本节点是 Leader 则本地执行，否则 HTTP 转发到 Leader
+///
+/// - 转发时透传 `X-Trace-Id` 等链路头
+/// - 响应头强制写回**客户端原始** `X-Trace-Id`，并标注 `X-Served-Node`
+async fn forward_or_run_raft_admin<F, Fut, T>(
+    state: AppState,
+    req: axum::extract::Request,
+    op: F,
+) -> axum::response::Response
+where
+    T: serde::de::DeserializeOwned,
+    F: FnOnce(cool_raft::Cluster, T) -> Fut,
+    Fut: std::future::Future<Output = Result<(), String>>,
+{
+    use axum::body::Body;
+    use axum::http::{HeaderValue, StatusCode};
+    use axum::response::{IntoResponse, Response};
+
+    let (parts, body) = req.into_parts();
+    let orig_trace = mod_base::middleware::trace_from_headers(&parts.headers).or_else(|| {
+        parts
+            .extensions
+            .get::<mod_base::middleware::TraceId>()
+            .map(|t| t.0.clone())
+    });
+    let path = parts.uri.path().to_string();
+    let query = parts.uri.query().map(|s| s.to_string());
+    let method = parts.method.clone();
+
+    let bytes = match axum::body::to_bytes(body, usize::MAX).await {
+        Ok(b) => b,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(cool_core::response::fail(format!("读取请求体失败: {e}"))),
+            )
+                .into_response();
+        }
+    };
+
+    let Some(cluster) = state.raft.clone() else {
+        return (
+            StatusCode::OK,
+            Json(cool_core::response::fail("Raft 未启用")),
+        )
+            .into_response();
+    };
+
+    // 本节点是 Leader：本地执行
+    if cluster.is_leader_node().await {
+        let body: T = match serde_json::from_slice(&bytes) {
+            Ok(v) => v,
+            Err(e) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(cool_core::response::fail(format!("参数错误: {e}"))),
+                )
+                    .into_response();
+            }
+        };
+        tracing::info!(
+            trace = orig_trace.as_deref().unwrap_or(""),
+            path = %path,
+            "Raft 管理请求本节点(Leader)执行"
+        );
+        let res = match op(cluster, body).await {
+            Ok(()) => Json(ok(serde_json::json!({ "ok": true }))),
             Err(e) => Json(cool_core::response::fail(e)),
-        },
-        None => Json(cool_core::response::fail("Raft 未启用")),
+        };
+        return attach_orig_trace(res.into_response(), orig_trace.as_deref(), "leader-local");
     }
+
+    // 非 Leader：转发到 Leader，并回写原始 trace id
+    let Some(leader_addr) = cluster.leader_addr().await else {
+        return (
+            StatusCode::OK,
+            Json(cool_core::response::fail("未知 Leader，无法转发")),
+        )
+            .into_response();
+    };
+
+    match cool_raft::forward_to_leader(
+        &leader_addr,
+        method.as_str(),
+        &path,
+        query.as_deref(),
+        &parts.headers,
+        bytes.to_vec(),
+    )
+    .await
+    {
+        Ok((status, hdrs, body_vec)) => {
+            tracing::info!(
+                trace = orig_trace.as_deref().unwrap_or(""),
+                leader = %leader_addr,
+                path = %path,
+                "Raft 管理请求已转发到 Leader"
+            );
+            let mut resp = Response::new(Body::from(body_vec));
+            *resp.status_mut() = StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY);
+            let h = resp.headers_mut();
+            for (k, v) in hdrs.iter() {
+                if k.as_str().eq_ignore_ascii_case("x-trace-id") {
+                    continue; // 稍后用原始 ID 覆盖
+                }
+                h.insert(k, v.clone());
+            }
+            if let Some(t) = &orig_trace
+                && let Ok(v) = HeaderValue::from_str(t)
+            {
+                h.insert("x-trace-id", v);
+            }
+            if let Ok(v) = HeaderValue::from_str(&leader_addr) {
+                h.insert("x-served-node", v);
+            }
+            resp
+        }
+        Err(e) => (
+            StatusCode::BAD_GATEWAY,
+            Json(cool_core::response::fail(e)),
+        )
+            .into_response(),
+    }
+}
+
+/// 响应写回原始 trace id
+fn attach_orig_trace(
+    mut resp: axum::response::Response,
+    orig_trace: Option<&str>,
+    served: &str,
+) -> axum::response::Response {
+    use axum::http::HeaderValue;
+    if let Some(t) = orig_trace
+        && let Ok(v) = HeaderValue::from_str(t)
+    {
+        resp.headers_mut().insert("x-trace-id", v);
+    }
+    if let Ok(v) = HeaderValue::from_str(served) {
+        resp.headers_mut().insert("x-served-node", v);
+    }
+    resp
 }

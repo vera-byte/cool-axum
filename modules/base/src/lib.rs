@@ -76,6 +76,7 @@ pub async fn init(db: &cool_db::DbManager, cache: cool_cache::CacheManager) {
         ("base_sys_department", initjson::DEPARTMENT),
         ("base_sys_role_department", initjson::ROLE_DEPARTMENT),
         ("base_sys_param", initjson::PARAM),
+        ("base_sys_conf", initjson::CONF),
     ] {
         match cool_db::fill_init_data(db, "default", table, raw).await {
             Ok(n) => tracing::debug!(table, inserted = n, "FillInitData"),

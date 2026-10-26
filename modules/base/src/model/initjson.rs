@@ -10,3 +10,4 @@ pub const ROLE_MENU: &str = include_str!("../../initjson/base_sys_role_menu.json
 pub const DEPARTMENT: &str = include_str!("../../initjson/base_sys_department.json");
 pub const ROLE_DEPARTMENT: &str = include_str!("../../initjson/base_sys_role_department.json");
 pub const PARAM: &str = include_str!("../../initjson/base_sys_param.json");
+pub const CONF: &str = include_str!("../../initjson/base_sys_conf.json");

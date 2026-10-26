@@ -44,6 +44,7 @@ fn base_cols() -> Vec<ColumnMeta> {
         col("createTime", "datetime", true, "创建时间"),
         col("updateTime", "datetime", true, "更新时间"),
         col("deleteTime", "datetime", false, "删除时间"),
+        col("tenantId", "bigint", false, "租户ID"),
     ]
 }
 
@@ -65,6 +66,8 @@ pub fn task_info() -> TableDef {
     cols.push(col("type", "int", false, "类型 0系统 1用户"));
     cols.push(col("nextRunTime", "datetime", false, "下次执行时间"));
     cols.push(col("taskType", "int", false, "任务类型 0cron 1时间间隔"));
+    cols.push(col("lastExecuteTime", "datetime", false, "上次执行时间"));
+    cols.push(col("lockExpireTime", "datetime", false, "执行锁过期时间"));
     TableDef {
         name: "task_info".into(),
         columns: cols,
@@ -104,7 +107,7 @@ fn task_info_service() -> CrudService {
         )
 }
 
-/// 注册 task 模块路由
+/// 注册 task 模块路由（双前缀 /task/* 与 /admin/task/*）
 pub fn routes<S: cool_core::CrudState + TaskState>() -> Router<S> {
     // task_log 只读 + 删除
     let log = CrudService::new("task_log")
@@ -130,21 +133,26 @@ pub fn routes<S: cool_core::CrudState + TaskState>() -> Router<S> {
     };
 
     // task_info：delete/info/list/page 走通用，add/update 自定义联动调度器
+    let info_api = ApiAllow {
+        add: false,
+        update: false,
+        ..ApiAllow::default()
+    };
 
-    crud_router(
-        "/task/info",
-        task_info_service(),
-        ApiAllow {
-            add: false,
-            update: false,
-            ..ApiAllow::default()
-        },
-    )
-    .merge(crud_router("/task/log", log, log_api))
-    .route("/task/info/add", post(add_task::<S>))
-    .route("/task/info/update", post(update_task::<S>))
-    .route("/task/info/once", post(once_task::<S>))
-    .route("/task/info/status", get(scheduler_status::<S>))
+    let mut r = Router::new();
+    for prefix in ["/task/info", "/admin/task/info"] {
+        r = r.merge(crud_router(prefix, task_info_service(), info_api.clone()));
+    }
+    for prefix in ["/task/log", "/admin/task/log"] {
+        r = r.merge(crud_router(prefix, log.clone(), log_api.clone()));
+    }
+    for prefix in ["/task/info", "/admin/task/info"] {
+        r = r.route(&format!("{prefix}/add"), post(add_task::<S>))
+            .route(&format!("{prefix}/update"), post(update_task::<S>))
+            .route(&format!("{prefix}/once"), post(once_task::<S>))
+            .route(&format!("{prefix}/status"), get(scheduler_status::<S>));
+    }
+    r
 }
 
 /// 暴露调度器给 handler

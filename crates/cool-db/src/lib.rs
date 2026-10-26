@@ -169,13 +169,30 @@ pub async fn fill_init_data(
         let Some(map) = row.as_object() else { continue };
         let mut data = map.clone();
         // 空字符串 parent 类字段转 NULL 不做特殊处理——JSON null 直接写 NULL
-        let sql = build_insert_json(table, &data);
-        // 转义错误不阻断其他行
-        data.clear();
+        let mut sql = build_insert_json(table, &data);
         match pool.execute(&sql).await {
             Ok(_) => inserted += 1,
             Err(e) => {
-                tracing::error!(group, table, error = %e, "种子数据插入失败");
+                // Unknown column：剔除后重试，避免 schema 漂移导致整表种子失败
+                let mut msg = e.to_string();
+                let mut retried = false;
+                while let Some(col) = unknown_column_name(&msg) {
+                    if data.remove(&col).is_none() {
+                        break;
+                    }
+                    sql = build_insert_json(table, &data);
+                    match pool.execute(&sql).await {
+                        Ok(_) => {
+                            inserted += 1;
+                            retried = true;
+                            break;
+                        }
+                        Err(e2) => msg = e2.to_string(),
+                    }
+                }
+                if !retried {
+                    tracing::error!(group, table, error = %e, "种子数据插入失败");
+                }
             }
         }
     }
@@ -470,4 +487,70 @@ fn map_type(kind: DbKind, sql_type: &str) -> String {
             }
         }
     }
+}
+
+/// 为已有表补齐缺失列（autoMigrate 的 CREATE IF NOT EXISTS 不会改旧表）
+///
+/// 逐列 `ALTER TABLE ... ADD COLUMN`，已存在则忽略重复列错误。
+pub async fn ensure_columns(pool: &DbPool, kind: DbKind, def: &TableDef) -> Result<u32, DbError> {
+    let quote = |s: &str| -> String {
+        match kind {
+            DbKind::MySql => format!("`{s}`"),
+            DbKind::Postgres => format!("\"{s}\""),
+        }
+    };
+    let mut added = 0u32;
+    for col in &def.columns {
+        if col.primary_key {
+            continue;
+        }
+        let mut line = format!(
+            "ALTER TABLE {} ADD COLUMN {} {}",
+            quote(&def.name),
+            quote(&col.name),
+            map_type(kind, &col.sql_type)
+        );
+        if col.not_null {
+            line.push_str(" NOT NULL");
+        }
+        if let Some(d) = &col.default {
+            line.push_str(&format!(" DEFAULT {d}"));
+        }
+        if !col.comment.is_empty() && kind == DbKind::MySql {
+            line.push_str(&format!(" COMMENT '{}'", col.comment.replace('\'', "''")));
+        }
+        match pool.execute(&line).await {
+            Ok(_) => {
+                added += 1;
+                tracing::info!(table = %def.name, column = %col.name, "autoMigrate 补列");
+            }
+            Err(e) => {
+                let msg = e.to_string();
+                // 1060 duplicate column / PG 42701 duplicate_column
+                if msg.contains("Duplicate column") || msg.contains("duplicate column") {
+                    tracing::debug!(table = %def.name, column = %col.name, "列已存在");
+                } else {
+                    tracing::warn!(table = %def.name, column = %col.name, error = %e, "autoMigrate 补列失败");
+                }
+            }
+        }
+    }
+    Ok(added)
+}
+
+/// 从 MySQL/PG 错误信息中解析未知列名
+fn unknown_column_name(msg: &str) -> Option<String> {
+    // MySQL: Unknown column 'xxx' in 'field list'
+    // PG:    column "xxx" of relation "yyy" does not exist
+    if let Some(i) = msg.find("Unknown column '") {
+        let rest = &msg[i + "Unknown column '".len()..];
+        let end = rest.find('\'')?;
+        return Some(rest[..end].to_string());
+    }
+    if let Some(i) = msg.find("column \"") {
+        let rest = &msg[i + "column \"".len()..];
+        let end = rest.find('"')?;
+        return Some(rest[..end].to_string());
+    }
+    None
 }

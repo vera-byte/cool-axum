@@ -261,14 +261,140 @@ curl 'http://127.0.0.1:8001/admin/dict/info/data?types=type'
 每个请求自动输出控制台日志并写入 `base_sys_log`：
 
 ```
-request method=POST path="/admin/base/sys/user/page" status=200 cost_ms=4
+2026-10-26T16:24:48.013Z INFO node=bj-node-2 request method=GET path="/health" status=200 cost_ms=1 trace=bj-node-2-79075c8caf69f9f5
 ```
 
 | 字段 | 说明 |
 |------|------|
+| `node=` | 节点标识（**全局**，所有日志行都有） |
+| trace | 链路 ID（含节点标签） |
 | userId | 登录人 ID（未登录为 0） |
 | action | `METHOD:path` |
 | ip | 客户端 IP（支持 X-Forwarded-For） |
-| params | query 串，敏感字段脱敏 |
+| params | query 串，敏感字段脱敏；**前缀 `trace=`** 便于按链路检索 |
 
 跳过 `/health`、`/public/*`、`/captcha`。
+
+### 日志格式（便于多节点排障）
+
+每行日志固定携带节点标识。格式由 `logger.format` 控制（`text` | `json`），级别由 `logger.level` 控制，详见 [配置说明 · logger](/configuration#logger)。
+
+**text（默认）**
+
+```
+{ISO时间} {级别} node={节点标签} {消息} {字段...}
+```
+
+| 部分 | 示例 | 说明 |
+|------|------|------|
+| ISO 时间 | `2026-10-26T16:24:48.013Z` | UTC |
+| 级别 | `INFO` / `WARN` / `ERROR` | `logger.level` |
+| **node=** | `bj-node-2` | 节点标签（`server.nodeLabel` 或 `{nodeId}@{port}`） |
+| 消息 + 字段 | `request method=... trace=...` | 请求类日志含 **trace=** |
+
+**json**
+
+```json
+{"timestamp":"...","level":"INFO","node":"json-node","message":"request","method":"GET","path":"/health","status":200,"trace":"json-node-79119b02ccf3bc4f"}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `timestamp` | ISO 时间 |
+| `level` | 级别 |
+| `node` | 节点标签 |
+| `message` | 消息 |
+| 其余 | 业务字段（method/path/status/trace…） |
+
+按 trace 检索：
+
+```bash
+grep 'trace=client-trace-001' app.log
+grep 'node=bj-node-2' app.log
+```
+
+数据库 `base_sys_log.params` 同样带 `trace=` 前缀：
+
+```sql
+SELECT * FROM base_sys_log WHERE params LIKE 'trace=client-trace-001%';
+```
+
+转发 Leader 时的执行日志：
+
+```
+INFO node=node2 Raft 管理请求已转发到 Leader trace=client-trace-001 leader=http://127.0.0.1:8001 path=/raft/change-membership
+INFO node=bj-node-1 Raft 管理请求本节点(Leader)执行 trace=... path=/raft/add-learner
+```
+
+## 链路追踪
+
+每个响应携带链路与节点标识，多节点部署下可直接看出请求落在哪台机器。
+
+### 响应头
+
+| Header | 示例 | 说明 |
+|--------|------|------|
+| `X-Trace-Id` | `bj-node-1-a3f2c1b0d9e8f706` | 链路 ID，**格式 `{nodeLabel}-{hex}`** |
+| `X-Node-Id` | `1` | 节点 ID（`raft.nodeId`） |
+| `X-Node-Label` | `bj-node-1` | 节点标签（`server.nodeLabel`，未配置则为 `{nodeId}@{port}`） |
+| `X-Parent-Trace-Id` | `upstream-abc123` | 上游透传的原链路 ID（可选） |
+| `X-Served-Node` | `http://127.0.0.1:8001` | 实际处理节点（仅在转发到 Leader 时出现） |
+
+### 规则
+
+1. **生成**：入站无 ID 时生成 `{nodeLabel}-{16hex}`
+2. **透传**：识别 `X-Trace-Id` / `X-Request-Id` / `X-Correlation-Id` / W3C `traceparent`，原值写入 `X-Parent-Trace-Id` 便于跨节点串联
+3. **节点标签**：`server.nodeLabel` 可自定义；未设置时默认 `{nodeId}@{port}`（非法字符在 trace 前缀中会替换为 `_`）
+4. **日志**：请求日志行打印 `trace=` 与 `node=`
+5. **转发 Leader**：见下节，响应头**始终返回客户端原始 `X-Trace-Id`**（不被 Leader 侧新 ID 覆盖）
+
+### 转发 Leader 时的链路
+
+Raft 管理操作（`/raft/add-learner`、`/raft/change-membership`）须由 **Leader** 执行。请求打到 Follower 时自动 HTTP 转发到 Leader：
+
+```
+Client ──X-Trace-Id: client-trace-001──► Follower(node2) ──透传 X-Trace-Id──► Leader(node1)
+   ◄──────────── X-Trace-Id: client-trace-001（原始，不改写）──────────────────┘
+                    X-Served-Node: http://127.0.0.1:8001
+```
+
+| 步骤 | 行为 |
+|------|------|
+| 1 | 入口节点生成或透传 `X-Trace-Id` |
+| 2 | 非 Leader 时向 Leader 发起同 method/path 的 HTTP 转发 |
+| 3 | 转发请求**携带** `X-Trace-Id` / `X-Parent-Trace-Id` 等链路头 |
+| 4 | 响应写回**客户端原始** `X-Trace-Id`（入口收到的值，而非 Leader 新生成的） |
+| 5 | 附加 `X-Served-Node` = 实际执行的 Leader 地址 |
+
+### 示例
+
+```bash
+# 1) 客户端指定 trace → 原样返回
+curl -D - -X POST http://127.0.0.1:8002/raft/change-membership \
+  -H 'Content-Type: application/json' \
+  -H 'X-Trace-Id: client-trace-001' \
+  -d '{"members":[1,2]}'
+# x-trace-id: client-trace-001          ← 原始 ID
+# x-served-node: http://127.0.0.1:8001  ← Leader 处理
+# x-node-label: node2                   ← 入口节点
+
+# 2) 未指定 → 返回入口节点生成的 ID
+curl -D - -X POST http://127.0.0.1:8002/raft/change-membership \
+  -H 'Content-Type: application/json' \
+  -d '{"members":[1,2]}'
+# x-trace-id: node2-79030cbd409b73ac
+# x-served-node: http://127.0.0.1:8001
+```
+
+自定义标签（`config.yaml`）：
+
+```yaml
+server:
+  address: ":8001"
+  nodeLabel: "bj-node-1"
+```
+
+```
+x-trace-id: bj-node-1-a3f2c1b0d9e8f706
+x-node-label: bj-node-1
+```

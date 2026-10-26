@@ -52,11 +52,8 @@ async fn login_handler<S: CrudState + FileState>(
     match base_sys_login::login(CrudState::db(&st), &req.username, &req.password, &ip).await {
         Ok(user) => {
             let login_id = user.id.to_string();
-            let mut perms = base_sys_perms::get_user_perms(CrudState::db(&st), user.id).await;
+            let perms = base_sys_perms::get_user_perms(CrudState::db(&st), user.id).await;
             let mut roles = base_sys_perms::get_user_roles(CrudState::db(&st), user.id).await;
-            if perms.is_empty() && user.username == "admin" {
-                perms = vec!["*".to_string()];
-            }
             if roles.is_empty() && user.username == "admin" {
                 roles = vec!["admin".to_string()];
             }

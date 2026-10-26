@@ -27,6 +27,7 @@ cargo run
 | **定时任务** | cron / interval 双模式，函数注册表，执行日志自动保留 |
 | **文件上传** | local / minio / oss 三驱动，按日分目录，文件名安全化 |
 | **请求日志** | 每请求控制台输出 + `base_sys_log` 落库（敏感字段脱敏） |
+| **链路追踪** | `X-Trace-Id` 含节点标签，`server.nodeLabel` 可定制 |
 | **缓存** | 内存 / Redis 双模式，登录失败计数、参数缓存 |
 | **多节点部署** | 无状态应用 + Redis 共享会话，Docker Compose / K8s 水平扩展 |
 | **Raft 选主** | openraft 集群选主，仅 Leader 执行定时任务，防重复调度 / 裂脑 |

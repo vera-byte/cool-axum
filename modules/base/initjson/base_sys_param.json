@@ -1,21 +1,45 @@
 [
   {
     "id": 1,
-    "createTime": "2021-02-26 13:53:05.000000",
-    "updateTime": "2021-03-03 17:50:04.000000",
-    "keyName": "text",
+    "createTime": "2026-10-26 23:24:25",
+    "updateTime": "2026-10-26 23:24:25",
+    "tenantId": null,
+    "keyName": "rich",
     "name": "富文本参数",
-    "data": "<p><strong class=\"ql-size-huge\">111xxxxx2222<span class=\"ql-cursor\">﻿﻿</span></strong></p>",
-    "dataType": 0,
+    "data": "<h3><strong>这是一个富文本</strong></h3><p>xxx</p><p>xxxxxxxxxx</p><p><br></p>",
+    "dataType": 1,
     "remark": null
   },
   {
     "id": 2,
-    "createTime": "2021-02-26 13:53:18.000000",
-    "updateTime": "2021-02-26 13:53:18.000000",
+    "createTime": "2026-10-26 23:24:25",
+    "updateTime": "2026-10-26 23:24:25",
+    "tenantId": null,
     "keyName": "json",
     "name": "JSON参数",
-    "data": "{\n    code: 111\n}",
+    "data": "{\n  \"code\": 111233\n}",
+    "dataType": 0,
+    "remark": null
+  },
+  {
+    "id": 3,
+    "createTime": "2026-10-26 23:24:25",
+    "updateTime": "2026-10-26 23:24:25",
+    "tenantId": null,
+    "keyName": "file",
+    "name": "文件",
+    "data": "",
+    "dataType": 2,
+    "remark": null
+  },
+  {
+    "id": 4,
+    "createTime": "2026-10-26 23:24:25",
+    "updateTime": "2026-10-26 23:24:25",
+    "tenantId": null,
+    "keyName": "text",
+    "name": "测试",
+    "data": "这是一段字符串",
     "dataType": 0,
     "remark": null
   }

@@ -5,8 +5,13 @@ server:
   clientMaxBodySize: 104857600
 
 logger:
-  level: "info"
+  level: "info"      # trace/debug/info/warn/error
+  format: "text"     # text | json
   stdout: true
+  # file:            # 可选：文件输出（按大小轮转）
+  #   path: "./logs/cool-axum.log"
+  #   maxSize: 10485760
+  #   maxFiles: 5
 
 database:
   default:
@@ -34,6 +39,11 @@ cool:
   file:
     mode: "local"
     domain: "http://127.0.0.1:8001"
+  # 多租户（可选，对齐 cool-admin-midway v8.0）
+  tenant:
+    enable: true
+    urls:
+      - "/admin/**"
 
 modules:
   base:
@@ -49,11 +59,12 @@ modules:
         enable: true
 
 # Raft 集群（可选）：启用后 Leader 节点执行定时任务
-# raft:
-#   enable: true
-#   nodeId: 1
-#   selfAddr: "http://127.0.0.1:8001"
-#   dataDir: "./data/raft"        # RocksDB 持久化目录（每节点独立）
-#   peers:
-#     - "1:http://127.0.0.1:8001"
-#     - "2:http://127.0.0.1:8002"
+# dataDir 自动按节点隔离为 dataDir/n{nodeId}，多节点可共用同一根目录
+raft:
+  enable: true
+  nodeId: 1
+  selfAddr: "http://127.0.0.1:8001"
+  dataDir: "./data/raft"
+  peers:
+    - "1:http://127.0.0.1:8001"
+    - "2:http://127.0.0.1:8002"

@@ -12,6 +12,7 @@ pub mod query;
 pub mod response;
 pub mod service;
 pub mod sql;
+pub mod tenant;
 
 pub use controller::{ApiAllow, CrudState, crud_router};
 pub use error::CoolError;

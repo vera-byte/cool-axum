@@ -46,14 +46,14 @@ pub fn routes<S: CrudState + FileState>() -> Router<S> {
         .route("/admin/base/comm/person", get(person::<S>))
 }
 
-/// GET .../person —— 当前登录人信息
+/// GET .../person —— 当前登录人信息（整行除 password，对齐 Go Person）
 async fn person<S: CrudState + FileState>(State(st): State<S>, headers: HeaderMap) -> Response {
     let Some(login_id) = login_id_from_headers(&headers).await else {
         return unauthorized();
     };
     let uid: i64 = login_id.parse().unwrap_or(0);
-    match base_sys_user::find_user_by_id(CrudState::db(&st), uid).await {
-        Some(u) => Json(ok(base_sys_user::user_json(&u))).into_response(),
+    match base_sys_user::person_json(CrudState::db(&st), uid).await {
+        Some(u) => Json(ok(u)).into_response(),
         None => Json(fail("用户不存在")).into_response(),
     }
 }

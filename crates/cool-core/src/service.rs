@@ -151,9 +151,12 @@ impl CrudService {
             if let Some(v) = data.get(field)
                 && !v.is_null()
             {
-                let b = SqlBuilder::new(&self.table)
+                let mut b = SqlBuilder::new(&self.table)
                     .soft_delete_col(Some(&self.soft_delete_col))
                     .eq(field, v.clone());
+                if let Some(t) = crate::tenant::current_tenant() {
+                    b = b.eq("tenantId", t);
+                }
                 let n = self.count_sql(db, &b.build_count()).await?;
                 if n > 0 {
                     return Err(CoolError::biz(msg.clone()));
@@ -165,6 +168,11 @@ impl CrudService {
             for (k, v) in f() {
                 data.insert(k, v);
             }
+        }
+
+        // 多租户：自动写入 tenantId（已显式指定则不覆盖）
+        if let Some(t) = crate::tenant::current_tenant() {
+            data.entry("tenantId".to_string()).or_insert_with(|| json!(t));
         }
 
         // 写入前变换
@@ -195,8 +203,12 @@ impl CrudService {
         if ids.is_empty() {
             return Err(CoolError::param("请选择要删除的数据"));
         }
-        let Some(sql) = SqlBuilder::build_soft_delete(&self.table, ids, &self.soft_delete_col)
-        else {
+        let Some(sql) = SqlBuilder::build_soft_delete(
+            &self.table,
+            ids,
+            &self.soft_delete_col,
+            crate::tenant::current_tenant(),
+        ) else {
             return Err(CoolError::param("请选择要删除的数据"));
         };
         let n = self.pool(db)?.execute(&sql).await?;
@@ -246,7 +258,13 @@ impl CrudService {
             ),
         );
 
-        let sql = SqlBuilder::build_update(&self.table, &data, id, Some(&self.soft_delete_col));
+        let sql = SqlBuilder::build_update(
+            &self.table,
+            &data,
+            id,
+            Some(&self.soft_delete_col),
+            crate::tenant::current_tenant(),
+        );
         let n = self.pool(db)?.execute(&sql).await?;
 
         // 更新后回调（补 SQL，如 passwordV 递增）
@@ -263,6 +281,9 @@ impl CrudService {
         let mut b = SqlBuilder::new(&self.table)
             .soft_delete_col(Some(&self.soft_delete_col))
             .eq("id", id);
+        if let Some(t) = crate::tenant::current_tenant() {
+            b = b.eq("tenantId", t);
+        }
         if !self.info_ignore_property.is_empty() {
             // FieldsEx：全表列无法静态得知，这里用 select * 由调用方在 ModifyResult 处理；
             // 若配置了 list_op.select 则复用
@@ -387,6 +408,10 @@ impl CrudService {
         let mut b = SqlBuilder::new(&self.table)
             .soft_delete_col(Some(&self.soft_delete_col))
             .select_cols(&op.select);
+        // 多租户隔离
+        if let Some(t) = crate::tenant::current_tenant() {
+            b = b.eq("tenantId", t);
+        }
 
         for join in &op.joins {
             b = match join.join_type {
