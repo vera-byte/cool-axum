@@ -31,6 +31,7 @@ where
         ("demo", mod_demo::route_groups::<S>),
         ("task", mod_task::route_groups::<S>),
         ("space", mod_space::route_groups::<S>),
+        ("recycle", mod_recycle::route_groups::<S>),
     ]
 }
 
@@ -42,6 +43,7 @@ pub fn all_tables() -> Vec<TableDef> {
         mod_demo::all_tables(),
         mod_task::all_tables(),
         mod_space::all_tables(),
+        mod_recycle::all_tables(),
     ]
     .into_iter()
     .flatten()
@@ -54,7 +56,8 @@ pub async fn boot_all(db: &DbManager, cache: cool_cache::CacheManager) {
     mod_dict::init(db, cache.clone()).await;
     mod_demo::init(db, cache.clone()).await;
     mod_task::init(db, cache.clone()).await;
-    mod_space::init(db, cache).await;
+    mod_space::init(db, cache.clone()).await;
+    mod_recycle::init(db, cache).await;
 }
 
 /// 组装路由：各模块 route_groups 自动注册 + 框架中间件

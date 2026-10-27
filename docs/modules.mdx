@@ -224,3 +224,16 @@ pub fn route_groups<S>() -> RouteGroups<S> { ... }
 ```
 
 表 / 种子 / 路由 / 启动钩子即自动接入。
+
+## recycle —— 数据回收站
+
+软删除的数据自动进入 `recycle_data`，可**恢复**或**清理**（对齐 cool-admin-midway）。
+
+| 接口 | 说明 |
+|------|------|
+| `POST /admin/recycle/data/page` | 分页（含操作人用户名） |
+| `GET /admin/recycle/data/info` | 详情 |
+| `POST /admin/recycle/data/restore` | `{"ids":[1,2]}` 恢复到原表 |
+| `POST /admin/recycle/clear` | `{"all":true}` 或按 `recycleKeep` 清过期 |
+
+配置项 `base_sys_conf.recycleKeep`：保留天数；未配置则 `clear` 默认全清。

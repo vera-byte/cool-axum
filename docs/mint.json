@@ -27,7 +27,9 @@
         "authentication",
         "database",
         "tenant",
-        "modules"
+        "event",
+        "modules",
+        "codegen"
       ]
     },
     {

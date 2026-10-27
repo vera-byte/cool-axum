@@ -26,6 +26,7 @@ members = [
     "modules/demo",
     "modules/task",
     "modules/space",
+    "modules/recycle",
 ]
 
 [workspace.package]
@@ -47,6 +48,7 @@ mod-dict = { path = "modules/dict" }
 mod-demo = { path = "modules/demo" }
 mod-task = { path = "modules/task" }
 mod-space = { path = "modules/space" }
+mod-recycle = { path = "modules/recycle" }
 
 axum = { version = "0.8", features = ["macros", "multipart"] }
 tokio = { version = "1", features = ["full"] }
@@ -88,6 +90,7 @@ mod-dict = { workspace = true }
 mod-demo = { workspace = true }
 mod-task = { workspace = true }
 mod-space = { workspace = true }
+mod-recycle = { workspace = true }
 modules = { workspace = true }
 axum = { workspace = true }
 tokio = { workspace = true }

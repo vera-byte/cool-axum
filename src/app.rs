@@ -93,8 +93,30 @@ pub async fn serve(config: AppConfig) -> anyhow::Result<()> {
             CacheManager::new_memory()
         }
     };
-    // 模块启动钩子（缓存注入、参数预热、种子管理员等）
+
+    // 分布式全局事件总线（Redis Pub/Sub；无 Redis 降级进程内）
+    let event_bus = cool_core::event::EventBus::new(cool_core::event::EventBusConfig::new(
+        redis_url.clone(),
+        "cool",
+    ))
+    .await;
+    // 设为全局，供模块 init 注册处理器、notify_soft_delete 等无句柄调用点 emit
+    cool_core::event::init_global(event_bus.clone());
+
+    // 模块启动钩子（缓存注入、参数预热、种子管理员等；可在此注册事件处理器）
     modules::boot_all(&db, cache.clone()).await;
+    // 处理器注册完成后再启动 Redis 订阅
+    event_bus.start_listener();
+    // 启动生命周期事件（对齐 cool-admin-midway configuration 的 emit('onReady'/'onServerReady')）
+    {
+        let empty = serde_json::json!({});
+        event_bus
+            .emit(cool_core::event::Event::Ready, empty.clone())
+            .await;
+        event_bus
+            .emit(cool_core::event::Event::ServerReady, empty)
+            .await;
+    }
 
     // 文件上传驱动
     let file = match cool_file::create_driver(&config.cool.file) {
@@ -117,53 +139,53 @@ pub async fn serve(config: AppConfig) -> anyhow::Result<()> {
             tracing::error!(error = e, "Raft 配置校验失败，继续单机模式");
             None
         } else {
-        let peers: Vec<(cool_raft::NodeId, String)> = config
-            .raft
-            .peers
-            .iter()
-            .filter_map(|p| {
-                let mut it = p.splitn(2, ':');
-                let id: u64 = it.next()?.parse().ok()?;
-                let addr = it.next()?.to_string();
-                Some((id, addr))
-            })
-            .collect();
-        let data_dir = std::path::PathBuf::from(&config.raft.data_dir)
-            .join(format!("n{}", config.raft.node_id));
-        tracing::info!(node_id = config.raft.node_id, data_dir = %data_dir.display(), "Raft 节点数据目录");
-        match cool_raft::start(
-            config.raft.node_id,
-            config.raft.self_addr.clone(),
-            peers,
-            data_dir,
-            None,
-        )
-        .await
-        {
-            Ok(c) => {
-                tracing::info!(node_id = c.node_id, "Raft 集群已启动");
-                // Leader 门控：初始置 false，后台轮询更新（避免 Follower 启动窗口误执行）
-                scheduler.set_leader_ok(false);
-                {
-                    let c = c.clone();
-                    let flag = scheduler.leader_flag();
-                    tokio::spawn(async move {
-                        loop {
-                            flag.store(
-                                c.verify_quorum_leadership().await,
-                                std::sync::atomic::Ordering::Relaxed,
-                            );
-                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                        }
-                    });
+            let peers: Vec<(cool_raft::NodeId, String)> = config
+                .raft
+                .peers
+                .iter()
+                .filter_map(|p| {
+                    let mut it = p.splitn(2, ':');
+                    let id: u64 = it.next()?.parse().ok()?;
+                    let addr = it.next()?.to_string();
+                    Some((id, addr))
+                })
+                .collect();
+            let data_dir = std::path::PathBuf::from(&config.raft.data_dir)
+                .join(format!("n{}", config.raft.node_id));
+            tracing::info!(node_id = config.raft.node_id, data_dir = %data_dir.display(), "Raft 节点数据目录");
+            match cool_raft::start(
+                config.raft.node_id,
+                config.raft.self_addr.clone(),
+                peers,
+                data_dir,
+                None,
+            )
+            .await
+            {
+                Ok(c) => {
+                    tracing::info!(node_id = c.node_id, "Raft 集群已启动");
+                    // Leader 门控：初始置 false，后台轮询更新（避免 Follower 启动窗口误执行）
+                    scheduler.set_leader_ok(false);
+                    {
+                        let c = c.clone();
+                        let flag = scheduler.leader_flag();
+                        tokio::spawn(async move {
+                            loop {
+                                flag.store(
+                                    c.verify_quorum_leadership().await,
+                                    std::sync::atomic::Ordering::Relaxed,
+                                );
+                                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                            }
+                        });
+                    }
+                    Some(c)
                 }
-                Some(c)
+                Err(e) => {
+                    tracing::error!(error = %e, "Raft 启动失败，继续单机模式");
+                    None
+                }
             }
-            Err(e) => {
-                tracing::error!(error = %e, "Raft 启动失败，继续单机模式");
-                None
-            }
-        }
         }
     } else {
         tracing::info!("Raft 未启用（单机模式，任务本地执行）");
@@ -220,12 +242,7 @@ pub async fn serve(config: AppConfig) -> anyhow::Result<()> {
         enable: state.config.cool.tenant.enable,
         urls: state.config.cool.tenant.urls.clone(),
     };
-    let app = modules::build_router(
-        state.clone(),
-        state.sa.clone(),
-        extra_open,
-        tenant_policy,
-    );
+    let app = modules::build_router(state.clone(), state.sa.clone(), extra_open, tenant_policy);
 
     let addr = normalize_addr(&config.server.address);
     let listener = tokio::net::TcpListener::bind(&addr)
@@ -291,7 +308,9 @@ fn validate_raft_config(config: &AppConfig) -> Result<(), String> {
         }
     }
     if !config.raft.peers.is_empty() && !self_listed {
-        return Err(format!("peers 中缺少本节点 nodeId={nid}（当前 selfAddr={self_addr}）"));
+        return Err(format!(
+            "peers 中缺少本节点 nodeId={nid}（当前 selfAddr={self_addr}）"
+        ));
     }
     Ok(())
 }
@@ -535,11 +554,7 @@ where
             }
             resp
         }
-        Err(e) => (
-            StatusCode::BAD_GATEWAY,
-            Json(cool_core::response::fail(e)),
-        )
-            .into_response(),
+        Err(e) => (StatusCode::BAD_GATEWAY, Json(cool_core::response::fail(e))).into_response(),
     }
 }
 
@@ -560,7 +575,6 @@ fn attach_orig_trace(
     }
     resp
 }
-
 
 /// 规范化路由路径（保证以 / 开头）
 fn normalize_route_path(p: &str) -> String {

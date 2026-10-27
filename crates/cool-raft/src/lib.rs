@@ -264,7 +264,10 @@ pub async fn forward_to_leader(
         rb = rb.body(body);
     }
 
-    let resp = rb.send().await.map_err(|e| format!("转发 Leader 失败: {e}"))?;
+    let resp = rb
+        .send()
+        .await
+        .map_err(|e| format!("转发 Leader 失败: {e}"))?;
     let status = resp.status().as_u16();
     let mut out_headers = axum::http::HeaderMap::new();
     for (k, v) in resp.headers().iter() {

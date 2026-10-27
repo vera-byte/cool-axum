@@ -6,6 +6,7 @@
 
 pub mod controller;
 pub mod error;
+pub mod event;
 pub mod model;
 pub mod module;
 pub mod query;
@@ -16,6 +17,9 @@ pub mod tenant;
 
 pub use controller::{ApiAllow, CrudState, crud_router};
 pub use error::CoolError;
+pub use event::{
+    BoxFut, DeliverMode, Event, EventBus, EventBusConfig, EventData, Handler, global, init_global,
+};
 pub use model::{Model, ModelMeta};
 pub use module::{ModuleSpec, RouteGroups};
 pub use query::{JoinOp, JoinType, ListReq, PageReq, QueryOp};

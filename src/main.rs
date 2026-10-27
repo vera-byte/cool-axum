@@ -51,8 +51,8 @@ fn init_tracing(cfg: &LoggerConfig) -> Result<(), Box<dyn std::error::Error + Se
     use tracing_subscriber::registry::LookupSpan;
     use tracing_subscriber::util::SubscriberInitExt;
 
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(cfg.level.as_str()));
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(cfg.level.as_str()));
 
     /// text：每行固定携带节点标识
     struct NodeFormat;
@@ -117,23 +117,25 @@ fn init_tracing(cfg: &LoggerConfig) -> Result<(), Box<dyn std::error::Error + Se
                     self.map.insert(key, serde_json::json!(value));
                 }
                 fn record_i64(&mut self, field: &Field, value: i64) {
-                    self.map.insert(field.name().to_string(), serde_json::json!(value));
+                    self.map
+                        .insert(field.name().to_string(), serde_json::json!(value));
                 }
                 fn record_u64(&mut self, field: &Field, value: u64) {
-                    self.map.insert(field.name().to_string(), serde_json::json!(value));
+                    self.map
+                        .insert(field.name().to_string(), serde_json::json!(value));
                 }
                 fn record_bool(&mut self, field: &Field, value: bool) {
-                    self.map.insert(field.name().to_string(), serde_json::json!(value));
+                    self.map
+                        .insert(field.name().to_string(), serde_json::json!(value));
                 }
             }
 
             let mut map = serde_json::Map::new();
             map.insert(
                 "timestamp".into(),
-                serde_json::json!(chrono::Utc::now().to_rfc3339_opts(
-                    chrono::SecondsFormat::Millis,
-                    true
-                )),
+                serde_json::json!(
+                    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+                ),
             );
             map.insert(
                 "level".into(),
@@ -179,7 +181,10 @@ fn init_tracing(cfg: &LoggerConfig) -> Result<(), Box<dyn std::error::Error + Se
                     .boxed(),
             );
         }
-        tracing_subscriber::registry().with(filter).with(layers).init();
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(layers)
+            .init();
     } else {
         let mut layers = Vec::new();
         if cfg.stdout {
@@ -198,7 +203,10 @@ fn init_tracing(cfg: &LoggerConfig) -> Result<(), Box<dyn std::error::Error + Se
                     .boxed(),
             );
         }
-        tracing_subscriber::registry().with(filter).with(layers).init();
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(layers)
+            .init();
     }
 
     if let Some(f) = &cfg.file {

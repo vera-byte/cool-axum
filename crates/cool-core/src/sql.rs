@@ -41,6 +41,7 @@ pub fn quote_ident(col: &str) -> String {
 pub struct SqlBuilder {
     select: Vec<String>,
     from: String,
+    from_alias: Option<String>,
     joins: Vec<String>,
     wheres: Vec<String>,
     order_by: Vec<String>,
@@ -230,6 +231,12 @@ impl SqlBuilder {
         self
     }
 
+    /// 主表别名（联表时避免列名歧义）
+    pub fn as_alias(mut self, alias: &str) -> Self {
+        self.from_alias = Some(alias.to_string());
+        self
+    }
+
     /// LEFT JOIN table AS alias ON condition
     pub fn left_join(mut self, table: &str, alias: &str, condition: &str) -> Self {
         self.joins
@@ -269,12 +276,23 @@ impl SqlBuilder {
         if let Some(col) = &self.soft_delete_col
             && is_safe_ident(col)
         {
-            parts.push(format!("{col} IS NULL"));
+            let qualified = match &self.from_alias {
+                Some(a) if is_safe_ident(a) => format!("{a}.{col}"),
+                _ => col.clone(),
+            };
+            parts.push(format!("{qualified} IS NULL"));
         }
         if parts.is_empty() {
             String::new()
         } else {
             format!(" WHERE {}", parts.join(" AND "))
+        }
+    }
+
+    fn render_from(&self) -> String {
+        match &self.from_alias {
+            Some(a) if is_safe_ident(a) => format!("{} AS {}", self.from, a),
+            _ => self.from.clone(),
         }
     }
 
@@ -285,7 +303,8 @@ impl SqlBuilder {
         } else {
             self.select.join(", ")
         };
-        let mut sql = format!("SELECT {cols} FROM {}", self.from);
+        let from = self.render_from();
+        let mut sql = format!("SELECT {cols} FROM {from}");
         for j in &self.joins {
             let _ = write!(sql, " {j}");
         }
@@ -304,7 +323,8 @@ impl SqlBuilder {
 
     /// SELECT COUNT(*) 语句
     pub fn build_count(&self) -> String {
-        let mut sql = format!("SELECT COUNT(*) AS count FROM {}", self.from);
+        let from = self.render_from();
+        let mut sql = format!("SELECT COUNT(*) AS count FROM {from}");
         for j in &self.joins {
             let _ = write!(sql, " {j}");
         }

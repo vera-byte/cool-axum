@@ -29,9 +29,11 @@ cargo run
 | **请求日志** | 每请求控制台输出 + `base_sys_log` 落库（敏感字段脱敏） |
 | **链路追踪** | `X-Trace-Id` 含节点标签，`server.nodeLabel` 可定制 |
 | **多租户** | `tenantId` 列级数据隔离，`cool.tenant` 配置开关 |
+| **数据回收站** | 软删除进 `recycle_data`，可恢复 / 清理 |
 | **缓存** | 内存 / Redis 双模式，登录失败计数、参数缓存 |
 | **多节点部署** | 无状态应用 + Redis 共享会话，Docker Compose / K8s 水平扩展 |
 | **Raft 选主** | openraft 集群选主，仅 Leader 执行定时任务，防重复调度 / 裂脑 |
+| **分布式事件** | Redis Pub/Sub 事件总线，`global_emit` 广播 / 随机（精确一次）跨机器投递 |
 | **代码生成器** | `cool-gen` 从数据库表一键生成 CRUD 模块 |
 | **文档站** | 完整 Mintlify 文档（`docs/`） |
 
@@ -240,6 +242,8 @@ curl -X POST http://127.0.0.1:8001/base/comm/upload \
 ```
 
 ### 代码生成器
+
+详见 [docs/codegen.mdx](docs/codegen.mdx)。
 
 ```bash
 cargo run -p cool-gen -- tables                            # 列出全部表

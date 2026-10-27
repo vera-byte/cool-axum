@@ -20,4 +20,5 @@ mod-dict = { workspace = true }
 mod-demo = { workspace = true }
 mod-task = { workspace = true }
 mod-space = { workspace = true }
+mod-recycle = { workspace = true }
 tower-http = { version = "0.6", features = ["fs"] }

@@ -4,7 +4,7 @@
 
 use crate::error::CoolError;
 use crate::query::{ListReq, PageReq, QueryOp};
-use crate::sql::SqlBuilder;
+use crate::sql::{SqlBuilder, quote_ident};
 use cool_db::{DbManager, DbPool};
 use serde_json::{Map, Value, json};
 
@@ -172,7 +172,8 @@ impl CrudService {
 
         // 多租户：自动写入 tenantId（已显式指定则不覆盖）
         if let Some(t) = crate::tenant::current_tenant() {
-            data.entry("tenantId".to_string()).or_insert_with(|| json!(t));
+            data.entry("tenantId".to_string())
+                .or_insert_with(|| json!(t));
         }
 
         // 写入前变换
@@ -198,11 +199,26 @@ impl CrudService {
         Ok(json!({ "id": id }))
     }
 
-    /// 批量删除（软删除）
+    /// 批量删除（软删除），删除前行快照写入回收站钩子
     pub async fn delete(&self, db: &DbManager, ids: &[i64]) -> Result<Value, CoolError> {
         if ids.is_empty() {
             return Err(CoolError::param("请选择要删除的数据"));
         }
+        // 删除前快照（供回收站 restore）
+        let id_list = ids
+            .iter()
+            .map(|i| i.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+        let mut snap_sql = format!("SELECT * FROM {} WHERE `id` IN ({id_list})", self.table);
+        if let Some(col) = Some(&self.soft_delete_col) {
+            snap_sql.push_str(&format!(" AND {} IS NULL", quote_ident(col)));
+        }
+        if let Some(t) = crate::tenant::current_tenant() {
+            snap_sql.push_str(&format!(" AND `tenantId` = {t}"));
+        }
+        let rows = self.query_rows(db, &snap_sql).await.unwrap_or_default();
+
         let Some(sql) = SqlBuilder::build_soft_delete(
             &self.table,
             ids,
@@ -212,6 +228,17 @@ impl CrudService {
             return Err(CoolError::param("请选择要删除的数据"));
         };
         let n = self.pool(db)?.execute(&sql).await?;
+
+        if !rows.is_empty() {
+            let meta = crate::tenant::current_request_meta();
+            crate::tenant::notify_soft_delete(crate::tenant::SoftDeleteRecord {
+                table: self.table.clone(),
+                ids: ids.to_vec(),
+                rows,
+                user_id: meta.user_id,
+                url: meta.url,
+            });
+        }
         Ok(json!({ "rows": n }))
     }
 
@@ -408,6 +435,9 @@ impl CrudService {
         let mut b = SqlBuilder::new(&self.table)
             .soft_delete_col(Some(&self.soft_delete_col))
             .select_cols(&op.select);
+        if !op.from_alias.is_empty() {
+            b = b.as_alias(&op.from_alias);
+        }
         // 多租户隔离
         if let Some(t) = crate::tenant::current_tenant() {
             b = b.eq("tenantId", t);

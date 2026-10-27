@@ -93,7 +93,10 @@ impl Write for RotatingWriter {
         if inner.written + buf.len() as u64 > self.0.max_size {
             RotatingFile::rotate_locked(&mut inner, &self.0.path, self.0.max_files)?;
         }
-        let file = inner.file.as_mut().ok_or_else(|| io::Error::other("log closed"))?;
+        let file = inner
+            .file
+            .as_mut()
+            .ok_or_else(|| io::Error::other("log closed"))?;
         let n = file.write(buf)?;
         inner.written += n as u64;
         Ok(n)
@@ -137,10 +140,7 @@ mod tests {
             writeln!(f, "line-{i} {}", "x".repeat(40)).unwrap();
         }
         assert!(path.exists(), "当前日志文件应存在");
-        assert!(
-            suffix_path(&path, 1).exists(),
-            "应产生 .1 轮转文件"
-        );
+        assert!(suffix_path(&path, 1).exists(), "应产生 .1 轮转文件");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

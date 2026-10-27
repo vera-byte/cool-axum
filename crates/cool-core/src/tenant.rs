@@ -7,6 +7,7 @@
 
 use std::cell::Cell;
 use std::future::Future;
+use std::sync::{Arc, RwLock};
 
 /// 租户过滤策略（由 cool-config 注入）
 #[derive(Debug, Clone, Default)]
@@ -85,5 +86,73 @@ mod tests {
         let pats = vec!["/admin/*/user/*".to_string()];
         assert!(url_matches(&pats, "/admin/base/user/add"));
         assert!(!url_matches(&pats, "/admin/base/role/add"));
+    }
+}
+
+// ── 请求上下文 / 软删除回收钩子 ──────────────────────────────
+
+/// 请求元信息（删除回收记录用）
+#[derive(Debug, Clone, Default)]
+pub struct RequestMeta {
+    pub user_id: Option<i64>,
+    pub url: String,
+}
+
+tokio::task_local! {
+    static REQ_META: std::cell::RefCell<RequestMeta>;
+}
+
+/// 注入请求元信息（中间件调用）
+pub async fn with_request_meta<F: Future>(meta: RequestMeta, f: F) -> F::Output {
+    REQ_META.scope(std::cell::RefCell::new(meta), f).await
+}
+
+/// 当前请求元信息
+pub fn current_request_meta() -> RequestMeta {
+    REQ_META
+        .try_with(|c| c.borrow().clone())
+        .unwrap_or_default()
+}
+
+/// 软删除记录（回收站）
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SoftDeleteRecord {
+    pub table: String,
+    pub ids: Vec<i64>,
+    /// 删除前的行快照
+    pub rows: Vec<serde_json::Value>,
+    pub user_id: Option<i64>,
+    pub url: String,
+}
+
+type SoftDeleteHook = Arc<dyn Fn(SoftDeleteRecord) + Send + Sync>;
+static SOFT_DELETE_HOOK: RwLock<Option<SoftDeleteHook>> = RwLock::new(None);
+
+/// 注册软删除钩子（软删除事件之外的备用扩展点）
+pub fn set_soft_delete_hook(h: SoftDeleteHook) {
+    if let Ok(mut g) = SOFT_DELETE_HOOK.write() {
+        *g = Some(h);
+    }
+}
+
+/// 通知软删除（失败不影响业务）
+///
+/// 经事件总线触发 `Event::SoftDelete`（对齐 cool-admin-midway core
+/// `coolEventManager.emit(EVENT.SOFT_DELETE, params)`），回收站等处理器按事件名注册
+/// （对齐 `@Event(EVENT.SOFT_DELETE) softDelete(params)`）。软删除为**本进程**事件——
+/// 回收落库是共享存储，跨机会产生重复记录，故用 `emit` 而非 `global_emit`。
+/// 若注册了 `set_soft_delete_hook` 钩子则同步调用（备用扩展点，通常无需）。
+pub fn notify_soft_delete(rec: SoftDeleteRecord) {
+    if let Ok(g) = SOFT_DELETE_HOOK.read()
+        && let Some(h) = g.as_ref()
+    {
+        h(rec.clone());
+    }
+    // 经事件总线触发 onSoftDelete（本进程，fire-and-forget）
+    if let Some(bus) = crate::event::global() {
+        let data = serde_json::to_value(&rec).unwrap_or(serde_json::Value::Null);
+        tokio::spawn(async move {
+            bus.emit(crate::event::Event::SoftDelete, data).await;
+        });
     }
 }

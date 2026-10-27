@@ -161,7 +161,11 @@ fn new_trace_id() -> String {
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0);
     let rand = random_u64();
-    format!("{:08x}{:08x}", (ts & 0xffff_ffff) as u32, (rand & 0xffff_ffff) as u32)
+    format!(
+        "{:08x}{:08x}",
+        (ts & 0xffff_ffff) as u32,
+        (rand & 0xffff_ffff) as u32
+    )
 }
 
 fn random_u64() -> u64 {

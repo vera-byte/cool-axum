@@ -157,6 +157,19 @@ cool-axum/
 - `configuration` / `api-reference` / `introduction` / README / DELIVERY 同步
 
 
+## Unreleased · 数据回收站 recycle
+
+- 新增 `modules/recycle`（对齐 cool-admin-midway）：软删除自动进回收站
+- 表 `recycle_data`：entityInfo / userId / data 快照 / url / params / count
+- 接口：`POST /admin/recycle/data/page`（join 用户名）、`info`、`restore`、`clear`
+- 恢复：按快照将原表 `deleteTime` 置空；清理：按 `recycleKeep` 天或全清
+- `CrudService::delete` 软删除前自动快照并写入回收站（`RequestMeta` 记录操作人/URL）
+
+## Unreleased · 代码生成器文档
+
+- 新增 `docs/codegen.mdx`：cool-gen 命令、产物、集成步骤、列映射、FAQ
+- 导航「核心能力」加入代码生成器
+
 ## Unreleased · 路由别名与短前缀
 
 - 所有 CRUD 资源支持 `POST {prefix}/info/page`（等价 `page`）
@@ -217,3 +230,19 @@ cool-axum/
 - `logger.file.{path,maxSize,maxFiles}`：写入文件，满 `maxSize` 轮转为 `.1` `.2` …
 - `maxFiles` 控制保留份数；`stdout` 可与文件同时输出
 - 生产可 `stdout: false` 只写轮转文件
+
+## Unreleased · 分布式全局事件
+
+对齐 cool-admin-midway 事件框架（`@CoolEvent` / `@Event`）+ `DistributedEventBus`（Redis Pub/Sub）。
+
+### 事件总线（`crates/cool-core::event`）
+- `EventBus::on(name, handler)` 注册处理器（等价 `@Event(name)`）；`on_handler` 注册已构建 `Handler`
+- `emit` 本进程分发；`global_emit` 经 Redis Pub/Sub 跨进程、跨机器投递
+- 投递模式：`Broadcast`（广播所有实例）/ `Random`（`SET NX` 抢占，精确一次投递给一个实例）
+- 系统默认事件 `Event`（`onSoftDelete` / `onServerReady` / `onReady` / `esDataChange`）字符串值与 TS 逐字一致
+- 无 Redis 自动降级为进程内模式；频道 `cool:event:bus:{keys}` 多项目隔离
+
+### 集成
+- 软删除经 `notify_soft_delete` → `emit(Event::SoftDelete)` 触发（对齐 core `coolEventManager.emit(EVENT.SOFT_DELETE)`）
+- 启动装配：构造 + `init_global` + `start_listener` + 生命周期事件（`onReady` / `onServerReady`）
+- 新增文档页 [分布式事件](/event)

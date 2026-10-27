@@ -40,12 +40,7 @@ fn is_comm_path(path: &str) -> bool {
 }
 
 /// 公开路径（无需登录，防御性保留——外层已有 token 层放行）
-const OPEN_PREFIXES: &[&str] = &[
-    "/admin/base/open/",
-    "/health",
-    "/base/health",
-    "/public/",
-];
+const OPEN_PREFIXES: &[&str] = &["/admin/base/open/", "/health", "/base/health", "/public/"];
 
 /// URL → 权限点：去掉查询串，按 `/` 切分后用 `:` 连接
 ///

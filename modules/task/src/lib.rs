@@ -147,7 +147,8 @@ pub fn routes<S: cool_core::CrudState + TaskState>() -> Router<S> {
         r = r.merge(crud_router(prefix, log.clone(), log_api.clone()));
     }
     for prefix in ["/task/info", "/admin/task/info"] {
-        r = r.route(&format!("{prefix}/add"), post(add_task::<S>))
+        r = r
+            .route(&format!("{prefix}/add"), post(add_task::<S>))
             .route(&format!("{prefix}/update"), post(update_task::<S>))
             .route(&format!("{prefix}/once"), post(once_task::<S>))
             .route(&format!("{prefix}/status"), get(scheduler_status::<S>));

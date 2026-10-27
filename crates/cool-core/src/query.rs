@@ -35,6 +35,8 @@ pub struct QueryOp {
     pub select: String,
     /// 关联查询
     pub joins: Vec<JoinOp>,
+    /// 主表别名（联表防歧义）
+    pub from_alias: String,
 }
 
 impl QueryOp {
@@ -64,6 +66,11 @@ impl QueryOp {
 
     pub fn where_sql(mut self, clause: &str) -> Self {
         self.where_clauses.push(clause.to_string());
+        self
+    }
+
+    pub fn as_alias(mut self, alias: &str) -> Self {
+        self.from_alias = alias.to_string();
         self
     }
 

@@ -1,0 +1,199 @@
+---
+title: 代码生成器 cool-gen
+description: 从数据库表一键生成模块脚手架与 CRUD 代码
+---
+
+## 是什么
+
+`cool-gen` 对齐 cool-admin-go 的 `cool-tools`，从**已有数据库表**生成：
+
+1. **模块脚手架**（`module`）——与 `modules/base` 同构的分层目录
+2. **CRUD 代码**（`crud`）——表结构定义 + 路由片段
+3. **表清单**（`tables`）——快速查看库里有哪些表
+
+```bash
+cargo run -p cool-gen -- help
+```
+
+## 命令一览
+
+| 命令 | 说明 |
+|------|------|
+| `tables` | 列出数据库全部表（含注释） |
+| `module <moduleName>` | 创建模块脚手架（基于 demo/base 模板） |
+| `crud <table> [-m <module>]` | 从表结构生成 CRUD 代码 |
+| `help` / `-h` | 帮助 |
+
+配置读取与主服务相同：`COOL_CONFIG` 或默认 `config.yaml`（需要能连上数据库）。
+
+## tables —— 列出全部表
+
+```bash
+cargo run -p cool-gen -- tables
+```
+
+```
+base_sys_user          用户
+base_sys_role          角色
+demo_goods             商品
+...
+```
+
+MySQL 走 `information_schema`，PostgreSQL 走 `information_schema.tables`。
+
+## module —— 创建模块脚手架
+
+```bash
+cargo run -p cool-gen -- module report
+```
+
+在 `modules/report/` 生成与 `modules/base` 一致的分层结构：
+
+```text
+modules/report/
+├── Cargo.toml                 # 包名 mod-report
+├── initjson/                  # 种子数据
+└── src/
+    ├── api/{mod,v1}.rs        # 请求 DTO 示例
+    ├── config/mod.rs          # 模块配置
+    ├── controller/
+    │   ├── mod.rs
+    │   ├── admin/{mod,report_item}.rs   # CRUD 控制器
+    │   └── app/mod.rs
+    ├── funcs/mod.rs           # 任务函数注册
+    ├── middleware/mod.rs      # 模块中间件
+    ├── model/{mod,report_item,initjson}.rs
+    ├── service/{mod,report_item}.rs
+    ├── utils/mod.rs
+    └── lib.rs                 # spec / init / route_groups
+```
+
+命名规则：
+
+| 输入 | 结果 |
+|------|------|
+| `report` | 包名 `mod-report`，实体 `report_item` |
+| `my_report` | 包名 `mod-my-report`，实体 `my_report_item` |
+
+**接入 workspace**（生成后需手工两步）：
+
+1. 根 `Cargo.toml` 的 `[workspace].members` 加入 `"modules/report"`
+2. `modules/modules.rs` 的 `registered()` 加一行：
+
+```rust
+("report", mod_report::route_groups::<S>),
+```
+
+模块已导出 `spec()` / `init()` / `route_groups()`，可直接编译。
+
+> 模块目录已存在时会报错退出，避免覆盖。
+
+## crud —— 从表生成 CRUD
+
+```bash
+# 指定模块
+cargo run -p cool-gen -- crud demo_goods --module demo
+
+# 简写
+cargo run -p cool-gen -- crud demo_goods -m demo
+
+# 不指定模块 → 输出到 target/gen/crate-demo-goods/
+cargo run -p cool-gen -- crud demo_goods
+```
+
+### 产物
+
+输出到 **`target/gen/<table>/`**（不直接改业务源码，由人工合并）：
+
+| 文件 | 内容 |
+|------|------|
+| `tables.rs` | `TableDef` 完整列定义 |
+| `lib.rs` | `CrudService` + `crud_router` 路由片段 |
+
+示例 `tables.rs`：
+
+```rust
+/// `demo_goods` 表结构（由 cool-gen 自动生成）
+pub fn demo_goods() -> TableDef {
+    // id / createTime / updateTime / deleteTime + 业务列
+}
+```
+
+示例 `lib.rs` 路由片段：
+
+```rust
+pub fn routes_demo_goods() -> Router<S>
+where
+    S: cool_core::CrudState,
+{
+    let svc = CrudService::new("demo_goods")
+        .not_null_key("name", "名称不能为空");
+    crud_router("/demo/demo_goods", svc, ApiAllow::default())
+}
+```
+
+### 集成步骤（命令会打印）
+
+1. 将 `tables.rs` 合并到 `modules/<module>/src/model/`
+2. 将 `lib.rs` 路由片段合并进模块 `routes` / `route_groups`
+3. 模块不存在时先 `module` 脚手架
+
+### 列映射规则
+
+| 数据库 | 生成结果 |
+|--------|----------|
+| PRIMARY KEY | `primary_key: true` |
+| AUTO_INCREMENT | `auto_increment: true` |
+| NOT NULL | `not_null: true` |
+| DEFAULT x | `col_def(..., "x")` |
+| COLUMN_COMMENT | `comment` |
+| `deleted_at` 列名 | 规范化为 `deleteTime` |
+
+NOT NULL 且非主键的列会生成 `not_null_key` 校验提示。
+
+## 典型工作流
+
+```bash
+# 1. 建表（手写 DDL 或工具）
+mysql cooltest < my_table.sql
+
+# 2. 查看表是否已识别
+cargo run -p cool-gen -- tables
+
+# 3. 没有对应模块就先建
+cargo run -p cool-gen -- module report
+
+# 4. 生成 CRUD
+cargo run -p cool-gen -- crud report_item --module report
+
+# 5. 按提示合并代码，注册模块，编译
+cargo build --workspace
+```
+
+## 与手动编写对照
+
+| 项 | cool-gen | 手动 |
+|----|----------|------|
+| 表结构 `TableDef` | 自动从 DB 读列 | 手写 |
+| 五/六接口路由 | 生成片段 | 手写 |
+| 业务钩子（改密等） | 需手写 | 手写 |
+| 种子 initjson | 需自备 | 手写 |
+| 放置位置 | `target/gen/` 人工合并 | 直接在 `modules/` |
+
+生成器**不覆盖**已有模块源码，避免误改业务代码。
+
+## 常见问题
+
+**Q: `模块已存在`？**  
+`modules/<name>` 目录已存在。先删除或换名。
+
+**Q: `tables` 连不上库？**  
+检查 `config.yaml` 的 `database.default`，或 `COOL_CONFIG` 是否指向正确文件。
+
+**Q: 生成的路由前缀不对？**  
+`crud` 用 `/{module}/{table}` 作为前缀，合并时按需改成 `/admin/...`。
+
+**Q: 列类型没映射好？**  
+生成的是逻辑类型（`varchar`/`int`/`datetime`…），与 `cool-db::ColumnMeta` 一致；特殊类型可手改 `tables.rs`。
+
+相关阅读：[CRUD 引擎](/crud) · [模块结构](/modules) · [配置说明](/configuration)

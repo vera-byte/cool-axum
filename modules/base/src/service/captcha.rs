@@ -166,8 +166,7 @@ pub fn open_routes<S: Clone + Send + Sync + 'static>() -> axum::Router<S> {
         captcha(q).await
     }
 
-    Router::new()
-        .route("/admin/base/open/captcha", get(captcha_with_state::<S>))
+    Router::new().route("/admin/base/open/captcha", get(captcha_with_state::<S>))
 }
 
 #[cfg(test)]

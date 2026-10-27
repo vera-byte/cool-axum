@@ -220,6 +220,16 @@ membership:  {1, 2, 3}
 | RPC 路由 | `/raft/vote\|append\|snapshot` 始终挂在开放组；未启用/失败时返回明确错误而非 401 |
 | dataDir | 自动按 `n{nodeId}` 隔离，多进程可共用同一配置根目录 |
 
+## 分布式事件（跨机器通信）
+
+除 Raft 选主外，节点间还可通过**事件总线**（Redis Pub/Sub）解耦通信：
+
+- `emit`：仅本进程分发
+- `global_emit(Broadcast)`：广播给集群所有实例（跨机器）
+- `global_emit(Random)`：随机投递给一个实例（`SET NX` 精确一次）
+
+处理器按事件名注册（等价 cool-admin-midway `@Event(name)`），软删除等系统默认事件即经此触发。详见 [分布式事件](/event)。
+
 ## 无状态约定
 
 - 不在进程内缓存会话 / 权限（交给 Redis）

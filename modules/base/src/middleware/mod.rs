@@ -7,11 +7,11 @@
 pub mod authority;
 pub mod log;
 pub mod tenant;
-pub mod trace;
 pub mod token_norm;
+pub mod trace;
 
 pub use authority::*;
 pub use log::request_log;
 pub use tenant::{TenantLayerState, tenant_middleware};
 pub use token_norm::normalize_token_header;
-pub use trace::{TraceId, init_node, node_id, node_label, trace_id_middleware, trace_from_headers};
+pub use trace::{TraceId, init_node, node_id, node_label, trace_from_headers, trace_id_middleware};

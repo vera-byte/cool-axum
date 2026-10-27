@@ -15,6 +15,7 @@ description: cool-axum —— 基于 Axum 的 Rust 后台管理框架
 - **业务模块**：数据字典、定时任务、文件空间、示例模块
 - **多节点部署**：无状态应用 + Redis 会话，Docker / K8s 水平扩展
 - **Raft 选主**：集群内仅 Leader 执行定时任务，避免重复调度
+- **分布式事件**：Redis Pub/Sub 事件总线，广播 / 随机（精确一次）跨机器投递
 - **多租户**：`tenantId` 列级数据隔离，CRUD 自动注入（对齐 cool-admin-midway）
 
 ## 技术栈
@@ -26,6 +27,7 @@ description: cool-axum —— 基于 Axum 的 Rust 后台管理框架
 | 数据库 | sqlx（MySQL / PostgreSQL） |
 | 会话/缓存 | Redis |
 | 分布式选主 | openraft（任务单点执行） |
+| 事件总线 | Redis Pub/Sub（跨机器广播 / 随机投递） |
 | 文档 | Mintlify |
 
 ## 与 cool-admin-go 的对应关系
@@ -59,5 +61,8 @@ description: cool-axum —— 基于 Axum 的 Rust 后台管理框架
   </Card>
   <Card title="多节点部署" icon="server" href="/deployment">
     Docker Compose 与 K8s 部署
+  </Card>
+  <Card title="代码生成器" icon="wand-magic-sparkles" href="/codegen">
+    cool-gen 从表生成模块与 CRUD
   </Card>
 </CardGroup>

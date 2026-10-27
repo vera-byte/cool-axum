@@ -42,8 +42,7 @@ pub async fn tenant_middleware<S: CrudState>(
 async fn lookup_tenant_id<S: CrudState>(st: &S, user_id: i64) -> Option<i64> {
     use cool_core::service::query_rows_on;
     let pool = st.db().default_pool().ok()?;
-    let sql =
-        format!("SELECT tenantId FROM `base_sys_user` WHERE id = {user_id} LIMIT 1");
+    let sql = format!("SELECT tenantId FROM `base_sys_user` WHERE id = {user_id} LIMIT 1");
     let rows = query_rows_on(pool, &sql).await.ok()?;
     rows.first()
         .and_then(|r| r.get("tenantId"))

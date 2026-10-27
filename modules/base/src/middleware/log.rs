@@ -35,7 +35,12 @@ pub async fn request_log(req: Request, next: Next) -> Response {
     let req = Request::from_parts(parts, _body);
     let start = Instant::now();
 
-    let res = next.run(req).await;
+    let uid = resolve_user_id(&headers).await;
+    let meta = cool_core::tenant::RequestMeta {
+        user_id: uid,
+        url: path.clone(),
+    };
+    let res = cool_core::tenant::with_request_meta(meta, next.run(req)).await;
 
     let status = res.status().as_u16();
     let cost = start.elapsed().as_millis();

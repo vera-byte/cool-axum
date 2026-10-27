@@ -607,6 +607,7 @@ dependencies = [
  "mod-base",
  "mod-demo",
  "mod-dict",
+ "mod-recycle",
  "mod-space",
  "mod-task",
  "modules",
@@ -650,12 +651,15 @@ dependencies = [
  "chrono",
  "cool-config",
  "cool-db",
+ "futures-util",
+ "redis 0.27.6",
  "serde",
  "serde_json",
  "sqlx",
  "thiserror",
  "tokio",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -1952,6 +1956,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "mod-recycle"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "cool-auth",
+ "cool-cache",
+ "cool-core",
+ "cool-db",
+ "cool-file",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "mod-space"
 version = "0.1.0"
 dependencies = [
@@ -1991,6 +2012,7 @@ dependencies = [
  "mod-base",
  "mod-demo",
  "mod-dict",
+ "mod-recycle",
  "mod-space",
  "mod-task",
  "sa-token-plugin-axum",

@@ -14,3 +14,6 @@ sqlx = { workspace = true }
 tracing = { workspace = true }
 thiserror = { workspace = true }
 chrono = { workspace = true }
+redis = { workspace = true }
+uuid = { workspace = true }
+futures-util = "0.3"
