@@ -37,7 +37,6 @@ pub use service::captcha;
 use axum::Router;
 use controller::admin::base_comm::FileState;
 use cool_core::CrudState;
-use cool_core::event::{Event, EventData, global};
 /// 开放路由（免登录）：captcha / login / eps
 pub fn open_routes<S: CrudState + FileState>() -> Router<S> {
     controller::admin::base_open::routes::<S>()
@@ -92,20 +91,6 @@ pub async fn init(db: &cool_db::DbManager, cache: cool_cache::CacheManager) {
     login::seed_admin_if_empty(db).await;
 
     tracing::debug!("module base init finished ...");
-
-    tracing::debug!("module recycle init start ...");
-
-    // 软删除 → 回收站（对齐 midway `@Event(EVENT.SOFT_DELETE) softDelete(params)`）
-    // 处理器按事件名注册，由 notify_soft_delete 经事件总线触发
-    if let Some(bus) = global() {
-        bus.on(Event::ServerReady, {
-            move |data: EventData| {
-                Box::pin(async move {
-                    tracing::info!("服务已就绪!{data}");
-                })
-            }
-        });
-    }
 }
 
 /// 路由分组（open / comm / biz），由注册中心自动装配
