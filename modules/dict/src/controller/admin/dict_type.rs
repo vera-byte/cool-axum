@@ -21,8 +21,6 @@ fn service() -> CrudService {
 pub fn routes<S: CrudState>() -> Router<S> {
     let svc = service();
     let mut r = Router::new();
-    for prefix in ["/dict/type", "/admin/dict/type"] {
-        r = r.merge(crud_router(prefix, svc.clone(), ApiAllow::default()));
-    }
+    r = r.merge(crud_router("/admin/dict/type", svc.clone(), ApiAllow::default()));
     r
 }

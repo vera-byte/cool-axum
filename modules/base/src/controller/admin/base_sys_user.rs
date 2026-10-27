@@ -34,6 +34,7 @@ fn user_service() -> CrudService {
 }
 
 /// 注册 /admin/base/sys/user 与 /base/sys/user
+/// 兼容短路径 /admin/user/* 与 /user/*（前端习惯）
 pub fn routes<S: CrudState + FileState>() -> Router<S> {
     let svc = user_service();
     let api = ApiAllow {
@@ -46,14 +47,14 @@ pub fn routes<S: CrudState + FileState>() -> Router<S> {
     };
 
     let mut r = Router::new();
-    for prefix in ["/base/sys/user", "/admin/base/sys/user"] {
+    for prefix in ["/admin/base/sys/user", "/admin/user"] {
         r = r.merge(crud_router(prefix, svc.clone(), api.clone()));
     }
-    r = r
-        .route("/base/sys/user/add", post(add_user::<S>))
-        .route("/base/sys/user/update", post(update_user::<S>))
-        .route("/admin/base/sys/user/add", post(add_user::<S>))
-        .route("/admin/base/sys/user/update", post(update_user::<S>));
+    for prefix in ["/admin/base/sys/user", "/admin/user"] {
+        r = r
+            .route(&format!("{prefix}/add"), post(add_user::<S>))
+            .route(&format!("{prefix}/update"), post(update_user::<S>));
+    }
     r
 }
 

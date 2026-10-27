@@ -1,0 +1,281 @@
+---
+title: 多租户
+description: 列级数据隔离（tenantId），对齐 cool-admin-midway v8.0
+---
+
+## 是什么
+
+多租户（Multi-tenancy）让**单个应用实例服务多个租户**，数据按租户隔离，共享同一套代码与基础设施。
+
+cool-axum 通过在业务表增加 **`tenantId` 列**实现隔离（对齐 cool-admin-midway `BaseEntity`）：
+
+```text
+┌─────────────────────────────────────────┐
+│              cool-axum 实例               │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ │
+│  │ 租户 A   │ │ 租户 B   │ │ 租户 C   │ │
+│  │ tenantId │ │ tenantId │ │ tenantId │ │
+│  │    =1    │ │    =2    │ │    =3    │ │
+│  └────┬─────┘ └────┬─────┘ └────┬─────┘ │
+└───────┼────────────┼────────────┼────────┘
+        ▼            ▼            ▼
+     MySQL / PostgreSQL（同一库，按列隔离）
+```
+
+| 特点 | 说明 |
+|------|------|
+| **数据隔离** | 查询/更新/删除自动附加 `tenantId = 当前租户` |
+| **资源共享** | 多租户共用代码与基础设施 |
+| **默认关闭** | `cool.tenant.enable: false`，不影响单租户部署 |
+| **零侵入** | 业务 CRUD 代码无需改动，框架自动注入 |
+
+## 数据模型
+
+所有业务表（`base_sys_*`、`dict_*`、`task_*`、`space_*`、`demo_*`）均含公共列：
+
+| 列 | 类型 | 说明 |
+|----|------|------|
+| `id` | bigint | 主键 |
+| `createTime` / `updateTime` / `deleteTime` | datetime | 时间戳 / 软删除 |
+| **`tenantId`** | bigint，可空 | **租户 ID**；`NULL` 表示平台/超管数据 |
+
+种子数据（`initjson`）中 `tenantId: null`，即属于平台超管（如 `admin`）。
+
+## 开启多租户
+
+```yaml
+cool:
+  tenant:
+    enable: true
+    urls:
+      - "/admin/**"        # 需要隔离的 URL，支持 * / **
+      - "/base/**"
+```
+
+| 字段 | 默认 | 说明 |
+|------|------|------|
+| `enable` | `false` | 是否开启数据隔离 |
+| `urls` | `[]` | 需要过滤租户的 URL 列表，支持通配符 |
+
+### URL 通配符
+
+| 模式 | 匹配 |
+|------|------|
+| `/admin/**` | `/admin` 及其下所有路径（`/admin/base/sys/user/page`） |
+| `/admin/*/user/*` | 单段通配（`/admin/base/user/add`） |
+| `/admin/base/sys/user/page` | 精确路径 |
+
+仅 `urls` 命中的请求会注入 `tenantId`；未命中或 `enable: false` 时**不做隔离**。
+
+## 工作原理
+
+```
+请求 ──► tenant 中间件
+           │  1. URL 是否命中 tenant.urls？
+           │  2. 解析当前登录用户 → base_sys_user.tenantId
+           ▼
+      进入 CRUD（自动隔离）
+           ├─ SELECT  WHERE tenantId = ?
+           ├─ UPDATE  WHERE id = ? AND tenantId = ?
+           ├─ DELETE  WHERE id IN (...) AND tenantId = ?
+           ├─ INSERT  自动写入 tenantId
+           └─ 唯一键校验限定在同租户内
+```
+
+对齐 cool-admin-midway 的 TypeORM Subscriber 四类钩子（`afterSelect/Insert/Update/DeleteQueryBuilder`）。
+
+## 使用方式
+
+### 5 分钟快速上手
+
+1. **开启配置**
+
+```yaml
+cool:
+  tenant:
+    enable: true
+    urls:
+      - "/admin/**"
+      - "/demo/**"
+```
+
+2. **准备租户账号**
+
+```sql
+-- 租户 2 的管理员
+INSERT INTO base_sys_user
+  (createTime, updateTime, username, password, name, nickName, status, passwordV, tenantId)
+VALUES
+  (NOW(), NOW(), 'tenant2', 'bcrypt...', '租户2管理员', '租户2', 1, 1, 2);
+```
+
+3. **登录并写入数据**（自动带 tenantId=2）
+
+```bash
+TOKEN=$(curl -s -X POST http://127.0.0.1:8001/admin/base/open/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"tenant2","password":"123456"}' | jq -r .data.token)
+
+curl -X POST http://127.0.0.1:8001/demo/goods/add \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"商品A","typeId":1}'
+```
+
+4. **再查列表** —— 只能看到 tenantId=2 的行
+
+```bash
+curl -X POST http://127.0.0.1:8001/demo/goods/page \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"page":1,"size":10}'
+```
+
+### 业务代码零修改
+
+开启配置后，通用 CRUD（`add / delete / update / info / list / page`）自动隔离：
+
+```bash
+# 用户属于 tenantId=2，只能看到本租户数据
+curl -X POST http://127.0.0.1:8001/demo/goods/page \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"page":1,"size":10}'
+# SQL: ... WHERE deleteTime IS NULL AND tenantId = 2
+```
+
+新增数据自动带上当前租户：
+
+```bash
+curl -X POST http://127.0.0.1:8001/demo/goods/add \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"商品A","typeId":1}'
+# INSERT ... (name, typeId, tenantId, createTime, updateTime) VALUES (..., 2, ...)
+```
+
+### 各接口的隔离行为
+
+| 接口 | 行为 |
+|------|------|
+| `POST {p}/page` `POST {p}/list` | `WHERE ... AND tenantId = ?` |
+| `GET {p}/info?id=` | `WHERE id = ? AND tenantId = ?`（跨租户返回空） |
+| `POST {p}/update` | `WHERE id = ? AND tenantId = ?` |
+| `POST {p}/delete` | `WHERE id IN (...) AND tenantId = ?` |
+| `POST {p}/add` | 自动写入 `tenantId`（已显式传入则不覆盖） |
+| 唯一键校验 | 同租户内唯一（如名称） |
+
+响应体中原有字段不变，行数据会带 `tenantId`：
+
+```json
+{
+  "code": 1000,
+  "message": "success",
+  "data": {
+    "list": [
+      { "id": 1, "name": "商品A", "tenantId": 2, "createTime": "..." }
+    ],
+    "pagination": { "page": 1, "size": 10, "total": 1 }
+  }
+}
+```
+
+### Rust API
+
+| API | 说明 |
+|-----|------|
+| `cool_core::tenant::current_tenant()` | 当前请求的租户 ID（无则 `None`） |
+| `cool_core::tenant::with_tenant(id, fut)` | 在指定租户作用域内执行 |
+| `cool_core::tenant::no_tenant(fut)` | **临时关闭**隔离（跨租户查询） |
+| `cool_core::tenant::url_matches(patterns, path)` | URL 是否命中过滤规则 |
+
+### 局部关闭隔离（`no_tenant`）
+
+自定义 SQL / 平台级查询需要跨租户时，用 `cool_core::tenant::no_tenant`：
+
+```rust
+use cool_core::tenant::no_tenant;
+
+// 全租户汇总（不受 tenantId 过滤）
+let rows = no_tenant(async {
+    query_rows_on(pool, "SELECT COUNT(*) AS c FROM demo_goods").await
+}).await?;
+```
+
+对应 midway 的 `noTenant(ctx, async () => { ... })`。
+
+需要在自定义 SQL 里主动过滤时：
+
+```rust
+if let Some(t) = cool_core::tenant::current_tenant() {
+    sql.push_str(&format!(" AND tenantId = {t}"));
+}
+```
+
+### 超管 / 平台数据
+
+- `tenantId IS NULL`：平台数据（如种子菜单、超管账号）
+- 用户行的 `tenantId` 为空时，中间件不限制（视为平台用户）
+- 超管仍可通过 `no_tenant` 访问全部租户数据
+
+## 与权限的关系
+
+| 能力 | 多租户 | 权限（perms） |
+|------|--------|---------------|
+| 管的问题 | **能看哪些行**（数据） | **能做哪些操作**（接口） |
+| 实现 | `tenantId` 列过滤 | URL → 权限点比对 |
+| 组合 | 先登录 → 权限校验 → 租户过滤 | 同左 |
+
+同一请求链路：`token → 权限 → 租户`，二者叠加生效。
+
+## 配置示例
+
+```yaml
+server:
+  address: ":8001"
+  nodeLabel: "bj-node-1"
+
+logger:
+  level: "info"
+  format: "json"
+
+cool:
+  autoMigrate: true
+  tenant:
+    enable: true
+    urls:
+      - "/admin/**"
+      - "/base/sys/**"
+      - "/demo/**"
+```
+
+## 迁移说明
+
+1. **建表**：`autoMigrate` 会为所有业务表加上 `tenantId` 列（可空 bigint）
+2. **旧表**：启动时自动 `ALTER TABLE ADD COLUMN` 补齐，无需手工迁移
+3. **存量数据**：`tenantId` 默认为 `NULL`（平台数据），按需 `UPDATE ... SET tenantId = ?`
+4. **租户用户**：在 `base_sys_user` 设置 `tenantId`，登录后即可自动隔离
+
+```sql
+-- 将历史业务数据划给租户 2
+UPDATE demo_goods SET tenantId = 2 WHERE tenantId IS NULL;
+
+-- 创建租户账号
+INSERT INTO base_sys_user (createTime, updateTime, username, password, name, nickName, status, passwordV, tenantId)
+VALUES (NOW(), NOW(), 'tenant2', '...', '租户2管理员', '租户2', 1, 1, 2);
+```
+
+## 已知边界
+
+| 项 | 现状 |
+|----|------|
+| 自定义 SQL | **不**自动隔离（与 midway 一致），需自行拼 `tenantId` 或 `no_tenant` |
+| 租户管理界面 | 未内置（租户行维护在 `base_sys_user.tenantId` 等） |
+| 跨租户统计 | 用 `no_tenant` 包裹查询 |
+| 性能 | 建议为 `tenantId` 建索引（大表） |
+
+## API 参考
+
+隔离开启后，行为变化仅体现在 SQL 层，HTTP 接口签名不变。响应字段中会返回 `tenantId`（若有）。
+
+相关阅读：[配置说明](/configuration#cool) · [CRUD 引擎](/crud) · [权限校验](/authentication)

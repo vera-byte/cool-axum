@@ -36,9 +36,7 @@ fn service() -> CrudService {
 pub fn routes<S: CrudState>() -> Router<S> {
     let svc = service();
     let mut r = Router::new();
-    for prefix in ["/dict/info", "/admin/dict/info"] {
-        r = r.merge(crud_router(prefix, svc.clone(), ApiAllow::default()));
-    }
+    r = r.merge(crud_router("/admin/dict/info", svc.clone(), ApiAllow::default()));
     r
 }
 
@@ -53,12 +51,10 @@ pub struct DataReq {
 /// POST /admin/dict/info/data  body: {"types":["type","brand"]}
 /// GET  /admin/dict/info/data?types=type&types=brand
 pub fn open_routes<S: CrudState>() -> Router<S> {
-    Router::new()
-        .route(
-            "/admin/dict/info/data",
-            post(data_post::<S>).get(data_get::<S>),
-        )
-        .route("/dict/info/data", post(data_post::<S>).get(data_get::<S>))
+    Router::new().route(
+        "/admin/dict/info/data",
+        post(data_post::<S>).get(data_get::<S>),
+    )
 }
 
 async fn data_post<S: CrudState>(State(st): State<S>, Json(req): Json<DataReq>) -> Json<BaseRes> {

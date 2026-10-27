@@ -19,11 +19,8 @@ use crate::service::{base_open, base_sys_login, base_sys_perms, captcha};
 pub fn routes<S: CrudState + FileState>() -> Router<S> {
     Router::new()
         .route("/admin/base/open/captcha", get(captcha_handler::<S>))
-        .route("/base/open/captcha", get(captcha_handler::<S>))
         .route("/admin/base/open/login", post(login_handler::<S>))
-        .route("/base/login", post(login_handler::<S>))
         .route("/admin/base/open/logout", post(logout_handler))
-        .route("/base/logout", post(logout_handler))
         .route("/admin/base/open/eps", get(eps_handler::<S>))
 }
 

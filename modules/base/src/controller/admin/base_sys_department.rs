@@ -28,7 +28,7 @@ pub fn routes<S: CrudState + FileState>() -> Router<S> {
     let svc = service();
     let api = ApiAllow::default();
     let mut r = Router::new();
-    for prefix in ["/base/sys/department", "/admin/base/sys/department"] {
+    for prefix in ["/admin/base/sys/department", "/admin/department"] {
         r = r.merge(crud_router(prefix, svc.clone(), api.clone()));
     }
     r

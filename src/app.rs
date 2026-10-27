@@ -180,11 +180,26 @@ pub async fn serve(config: AppConfig) -> anyhow::Result<()> {
         raft,
     };
 
-    // 框架级路由（健康检查/服务信息）
+    // 框架级路由（健康检查/服务信息/OpenAPI）
+    let openapi_path = normalize_route_path(&config.server.openapi_path);
+    let swagger_path = normalize_route_path(&config.server.swagger_path);
+    let openapi_path_for_html = openapi_path.clone();
+
     let mut extra_open = axum::Router::new()
         .route("/", get(index))
         .route("/health", get(health))
         .route("/base/health", get(health))
+        .route(
+            openapi_path.as_str(),
+            get(|| async { axum::Json(crate::openapi::openapi_json()) }),
+        )
+        .route(
+            swagger_path.as_str(),
+            get(move || {
+                let api = openapi_path_for_html.clone();
+                async move { axum::response::Html(crate::openapi::swagger_html(&api)) }
+            }),
+        )
         .route("/raft/status", get(raft_status))
         .route("/raft/add-learner", axum::routing::post(raft_add_learner))
         .route(
@@ -544,4 +559,18 @@ fn attach_orig_trace(
         resp.headers_mut().insert("x-served-node", v);
     }
     resp
+}
+
+
+/// 规范化路由路径（保证以 / 开头）
+fn normalize_route_path(p: &str) -> String {
+    let p = p.trim();
+    if p.is_empty() {
+        return "/api.json".into();
+    }
+    if p.starts_with('/') {
+        p.to_string()
+    } else {
+        format!("/{p}")
+    }
 }

@@ -15,7 +15,7 @@ cool-axum 使用官方 [sa-token-rust](https://github.com/sa-tokens/sa-token-rus
 ## 登录
 
 ```bash
-curl -X POST http://127.0.0.1:8001/base/login \
+curl -X POST http://127.0.0.1:8001/admin/base/open/login \
   -H 'Content-Type: application/json' \
   -d '{"username":"admin","password":"admin123"}'
 ```
@@ -52,7 +52,7 @@ sa-token: <token>
 ## 当前用户
 
 ```bash
-curl http://127.0.0.1:8001/base/userinfo \
+curl http://127.0.0.1:8001/admin/base/comm/userinfo \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -61,7 +61,7 @@ curl http://127.0.0.1:8001/base/userinfo \
 ## 登出
 
 ```bash
-curl -X POST http://127.0.0.1:8001/base/logout \
+curl -X POST http://127.0.0.1:8001/admin/base/open/logout \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -84,8 +84,8 @@ HTTP/1.1 401 Unauthorized
 
 ## 密码与会话失效
 
-- **新增用户**：`POST /base/sys/user/add`，`password` 自动 bcrypt 哈希入库
-- **修改密码**：`POST /base/sys/user/update` 传新 `password`，自动：
+- **新增用户**：`POST /admin/base/sys/user/add`，`password` 自动 bcrypt 哈希入库
+- **修改密码**：`POST /admin/base/sys/user/update` 传新 `password`，自动：
   1. 哈希入库
   2. `passwordV + 1`
   3. **吊销该用户全部会话**（旧 token 立即 401）
@@ -141,8 +141,8 @@ modules:
 ### URL → 权限点
 
 ```
-/base/sys/menu/add   →  base:sys:menu:add
-/dict/type/page      →  dict:type:page
+/admin/base/sys/menu/add   →  base:sys:menu:add
+/admin/dict/type/page      →  dict:type:page
 /task/info/list      →  task:info:list
 ```
 

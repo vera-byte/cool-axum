@@ -18,13 +18,13 @@ use cool_core::response::{BaseRes, CODE_FORBIDDEN};
 
 /// 仅需登录、无需权限点校验的路径前缀（对齐 cool-admin-go AuthComm `/admin/*/comm/*`）
 const COMM_PREFIXES: &[&str] = &[
-    "/base/comm/",
     "/admin/base/comm/",
     "/app/base/comm/",
-    "/base/userinfo",
-    "/base/logout",
+    "/admin/base/comm/userinfo",
     "/base/health",
     "/health",
+    "/admin/task/info/once",
+    "/admin/task/info/status",
     "/task/info/once",
     "/task/info/status",
 ];
@@ -36,17 +36,12 @@ fn is_comm_path(path: &str) -> bool {
     }
     // /admin/xxx/comm/yyy 或 /app/xxx/comm/yyy
     let segs: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
-    segs.len() >= 3
-        && (segs[0] == "admin" || segs[0] == "app" || segs[0] == "base")
-        && segs[2] == "comm"
+    segs.len() >= 3 && (segs[0] == "admin" || segs[0] == "app") && segs[2] == "comm"
 }
 
 /// 公开路径（无需登录，防御性保留——外层已有 token 层放行）
 const OPEN_PREFIXES: &[&str] = &[
     "/admin/base/open/",
-    "/base/open/",
-    "/base/login",
-    "/admin/base/open/login",
     "/health",
     "/base/health",
     "/public/",

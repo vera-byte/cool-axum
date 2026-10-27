@@ -32,12 +32,6 @@ pub trait FileState: Clone + Send + Sync + 'static {
 /// 注册 /base/comm/* 与 /admin/base/comm/*
 pub fn routes<S: CrudState + FileState>() -> Router<S> {
     Router::new()
-        .route("/base/comm/uploadMode", get(upload_mode::<S>))
-        .route("/base/comm/upload", post(upload::<S>))
-        .route("/base/comm/permmenu", get(permmenu::<S>))
-        .route("/base/comm/refreshPerms", post(refresh_perms::<S>))
-        .route("/base/comm/person", get(person::<S>))
-        .route("/base/userinfo", get(person::<S>))
         .route("/admin/base/comm/userinfo", get(person::<S>))
         .route("/admin/base/comm/uploadMode", get(upload_mode::<S>))
         .route("/admin/base/comm/upload", post(upload::<S>))

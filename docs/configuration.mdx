@@ -20,8 +20,11 @@ server:
 |------|------|------|
 | `address` | `:8001` | 监听地址 |
 | `nodeLabel` | 未设置 | 节点标签；未设置时用 `{nodeId}@{port}`（nodeId 来自 `raft.nodeId`） |
+| `openapiPath` | `/api.json` | OpenAPI 3.0 文档地址（免登录） |
+| `swaggerPath` | `/swagger` | Swagger UI 地址（免登录） |
 
 `nodeLabel` 会出现在响应头 `X-Node-Label` 与链路 ID 前缀中，便于多节点下辨识请求落到哪台机器，见 [API 参考 · 链路追踪](/api-reference#链路追踪)。
+OpenAPI / Swagger 见 [API 参考](/api-reference#api-documents-openapi--swagger)。
 
 ## logger
 
@@ -146,7 +149,22 @@ cool:
       bucketName: "cool-axum"
       useSSL: false
       location: "us-east-1"
+  # 多租户（可选，对齐 cool-admin-midway v8.0）
+  tenant:
+    enable: true
+    urls:
+      - "/admin/**"
+      - "/base/sys/**"
 ```
+
+### cool.tenant（多租户）
+
+| 字段 | 默认 | 说明 |
+|------|------|------|
+| `enable` | `false` | 是否开启数据隔离 |
+| `urls` | `[]` | 需过滤租户的 URL，支持 `*` / `**` 通配 |
+
+开启后 CRUD 自动按 `base_sys_user.tenantId` 隔离数据。详见 [多租户](/tenant)。
 
 ## modules.base
 
@@ -219,6 +237,9 @@ redis:
 
 cool:
   autoMigrate: true
+  # tenant:
+  #   enable: true
+  #   urls: ["/admin/**"]
 
 modules:
   base:

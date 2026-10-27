@@ -15,6 +15,7 @@ description: cool-axum —— 基于 Axum 的 Rust 后台管理框架
 - **业务模块**：数据字典、定时任务、文件空间、示例模块
 - **多节点部署**：无状态应用 + Redis 会话，Docker / K8s 水平扩展
 - **Raft 选主**：集群内仅 Leader 执行定时任务，避免重复调度
+- **多租户**：`tenantId` 列级数据隔离，CRUD 自动注入（对齐 cool-admin-midway）
 
 ## 技术栈
 
@@ -52,6 +53,9 @@ description: cool-axum —— 基于 Axum 的 Rust 后台管理框架
   </Card>
   <Card title="登录鉴权" icon="shield" href="/authentication">
     sa-token 登录 / 权限 / 多节点会话
+  </Card>
+  <Card title="多租户" icon="users" href="/tenant">
+    tenantId 列级数据隔离
   </Card>
   <Card title="多节点部署" icon="server" href="/deployment">
     Docker Compose 与 K8s 部署

@@ -95,8 +95,9 @@ pub fn routes<S: cool_core::CrudState>() -> Router<S> {
     for (prefix, svc) in [
         ("/demo/sample", sample.clone()),
         ("/demo/goods", goods.clone()),
-        ("/admin/demo/sample", sample),
+        ("/admin/demo/sample", sample.clone()),
         ("/admin/demo/goods", goods),
+        ("/admin/demo", sample),
     ] {
         r = r.merge(crud_router(prefix, svc, ApiAllow::default()));
     }

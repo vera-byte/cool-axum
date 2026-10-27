@@ -125,14 +125,17 @@ pub fn crud_router<S: CrudState>(prefix: &str, service: CrudService, api: ApiAll
         );
     }
     if api.page {
-        let s = svc.clone();
-        r = r.route(
-            &format!("{prefix}/page"),
-            post(move |st: State<S>, body: Json<Value>| {
-                let s = s.clone();
-                async move { handle_page(st, s, body).await }
-            }),
-        );
+        // 同时注册 {prefix}/info/page 别名（部分前端拼法）
+        for path in [format!("{prefix}/page"), format!("{prefix}/info/page")] {
+            let s = svc.clone();
+            r = r.route(
+                path.as_str(),
+                post(move |st: State<S>, body: Json<Value>| {
+                    let s = s.clone();
+                    async move { handle_page(st, s, body).await }
+                }),
+            );
+        }
     }
 
     r

@@ -2,6 +2,7 @@
 
 mod app;
 mod log_rotate;
+mod openapi;
 
 use anyhow::Context;
 use cool_config::{AppConfig, LoggerConfig};

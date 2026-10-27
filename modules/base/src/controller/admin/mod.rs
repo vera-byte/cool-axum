@@ -57,9 +57,6 @@ mod relations {
 
         let mut r = Router::new();
         for (prefix, svc) in [
-            ("/base/sys/userRole", user_role.clone()),
-            ("/base/sys/roleMenu", role_menu.clone()),
-            ("/base/sys/roleDepartment", role_dept.clone()),
             ("/admin/base/sys/userRole", user_role.clone()),
             ("/admin/base/sys/roleMenu", role_menu.clone()),
             ("/admin/base/sys/roleDepartment", role_dept),

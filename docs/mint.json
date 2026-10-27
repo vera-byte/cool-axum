@@ -14,19 +14,36 @@
   "navigation": [
     {
       "group": "开始",
-      "pages": ["introduction", "quick-start", "configuration"]
+      "pages": [
+        "introduction",
+        "quick-start",
+        "configuration"
+      ]
     },
     {
       "group": "核心能力",
-      "pages": ["crud", "authentication", "database", "modules"]
+      "pages": [
+        "crud",
+        "authentication",
+        "database",
+        "tenant",
+        "modules"
+      ]
     },
     {
       "group": "架构与部署",
-      "pages": ["distributed", "deployment"]
+      "pages": [
+        "distributed",
+        "deployment"
+      ]
     },
     {
       "group": "参考",
-      "pages": ["api-reference", "faq", "changelog"]
+      "pages": [
+        "api-reference",
+        "faq",
+        "changelog"
+      ]
     }
   ],
   "footerSocials": {

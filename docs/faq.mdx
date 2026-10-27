@@ -58,3 +58,21 @@ modules:
 - xiaobai / xiaobai123、xiaohei 等演示账号（见 `base_sys_user`）
 
 密码为兼容的 MD5 存储；**改密后自动升级为 bcrypt** 并吊销全部旧会话。生产环境请立即修改。
+
+## 如何开启多租户数据隔离？
+
+在 `config.yaml` 中配置：
+
+```yaml
+cool:
+  tenant:
+    enable: true
+    urls:
+      - "/admin/**"
+```
+
+CRUD 接口会自动按当前用户的 `tenantId` 过滤数据；详见 [多租户](/tenant)。
+
+## 为什么自定义 SQL 没有租户过滤？
+
+与 cool-admin-midway 一致，**手写 SQL 不会自动注入 `tenantId`**。请自行拼条件，或用 `cool_core::tenant::no_tenant` 包裹跨租户查询。

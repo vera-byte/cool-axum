@@ -80,7 +80,7 @@ curl http://127.0.0.1:8001/health
 ### 登录
 
 ```bash
-curl -X POST http://127.0.0.1:8001/base/login \
+curl -X POST http://127.0.0.1:8001/admin/base/open/login \
   -H 'Content-Type: application/json' \
   -d '{"username":"admin","password":"admin123"}'
 ```
@@ -89,7 +89,7 @@ curl -X POST http://127.0.0.1:8001/base/login \
 
 ```bash
 # 用登录返回的 token
-curl -X POST http://127.0.0.1:8001/base/sys/user/page \
+curl -X POST http://127.0.0.1:8001/admin/base/sys/user/page \
   -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"page":1,"size":10}'

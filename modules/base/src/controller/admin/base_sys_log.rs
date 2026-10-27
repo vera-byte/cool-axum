@@ -34,7 +34,7 @@ pub fn routes<S: CrudState + FileState>() -> Router<S> {
         page: true,
     };
     let mut r = Router::new();
-    for prefix in ["/base/sys/log", "/admin/base/sys/log"] {
+    for prefix in ["/admin/base/sys/log", "/admin/log"] {
         r = r.merge(crud_router(prefix, svc.clone(), api.clone()));
     }
     r

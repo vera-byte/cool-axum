@@ -157,6 +157,34 @@ cool-axum/
 - `configuration` / `api-reference` / `introduction` / README / DELIVERY 同步
 
 
+## Unreleased · 路由别名与短前缀
+
+- 所有 CRUD 资源支持 `POST {prefix}/info/page`（等价 `page`）
+- 补短前缀：`/admin/user|role|menu|department|param|log|demo`
+- 验证 45 项路径全部 200
+
+## Unreleased · admin 路由收敛
+
+- `controller/admin` 下接口**只注册 `/admin/*`**
+- 移除 `/base/login`、`/base/sys/*`、`/dict/*` 等非 admin 前缀
+- 用户短前缀保留 `/admin/user/*`
+- 文档路径全部改为 `/admin/...`
+
+## Unreleased · OpenAPI / Swagger
+
+- `GET {server.openapiPath}`（默认 `/api.json`）输出 OpenAPI 3.0
+- `GET {server.swaggerPath}`（默认 `/swagger`）提供 Swagger UI
+- 两者免登录，修复原先 401（路由未注册落入鉴权层）
+
+## Unreleased · 多租户
+
+### 列级数据隔离
+- 业务表公共列 `tenantId`（对齐 cool-admin-midway `BaseEntity`）
+- `cool.tenant.{enable, urls}` 开关与 URL 过滤（支持 `*` / `**`）
+- CRUD 自动注入：SELECT/UPDATE/DELETE 过滤、INSERT 写入、唯一键限同租户
+- `no_tenant()` 局部关闭隔离（跨租户查询）
+- 旧表 autoMigrate 自动补列；文档新增 [多租户](/tenant)
+
 ## Unreleased · 链路追踪与节点标签
 
 ### X-Trace-Id 含节点

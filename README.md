@@ -28,6 +28,7 @@ cargo run
 | **文件上传** | local / minio / oss 三驱动，按日分目录，文件名安全化 |
 | **请求日志** | 每请求控制台输出 + `base_sys_log` 落库（敏感字段脱敏） |
 | **链路追踪** | `X-Trace-Id` 含节点标签，`server.nodeLabel` 可定制 |
+| **多租户** | `tenantId` 列级数据隔离，`cool.tenant` 配置开关 |
 | **缓存** | 内存 / Redis 双模式，登录失败计数、参数缓存 |
 | **多节点部署** | 无状态应用 + Redis 共享会话，Docker Compose / K8s 水平扩展 |
 | **Raft 选主** | openraft 集群选主，仅 Leader 执行定时任务，防重复调度 / 裂脑 |
@@ -102,12 +103,12 @@ COOL_CONFIG=config.yaml cargo run
 curl http://127.0.0.1:8001/health
 
 # 登录
-TOKEN=$(curl -s -X POST http://127.0.0.1:8001/base/login \
+TOKEN=$(curl -s -X POST http://127.0.0.1:8001/admin/base/open/login \
   -H 'Content-Type: application/json' \
   -d '{"username":"admin","password":"123456"}' | jq -r .data.token)
 
 # 调用 CRUD
-curl -X POST http://127.0.0.1:8001/base/sys/user/page \
+curl -X POST http://127.0.0.1:8001/admin/base/sys/user/page \
   -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"page":1,"size":10}'
@@ -171,9 +172,9 @@ let router = crud_router("/demo/sample", svc, ApiAllow::default());
 ### 登录鉴权
 
 ```bash
-POST /base/login     # 登录（bcrypt 校验 + 失败锁定）
-POST /base/logout    # 登出
-GET  /base/userinfo  # 当前用户
+POST /admin/base/open/login     # 登录（bcrypt 校验 + 失败锁定）
+POST /admin/base/open/logout    # 登出
+GET  /admin/base/comm/userinfo  # 当前用户
 GET  /base/comm/permmenu  # 权限点 + 菜单树
 ```
 
@@ -184,7 +185,7 @@ GET  /base/comm/permmenu  # 权限点 + 菜单树
 URL 自动映射权限点：
 
 ```
-/base/sys/menu/add  →  base:sys:menu:add
+/admin/base/sys/menu/add  →  base:sys:menu:add
 ```
 
 与 `base_sys_menu.perms` 比对，超管（`userId=1` 或 perms 含 `*`）放行。
@@ -213,6 +214,21 @@ raft:
 ```
 
 Raft 状态用 RocksDB 持久化到 `dataDir`（重启可恢复）。`GET /raft/status` 查看角色与 Leader；详见 [分布式架构](docs/distributed.mdx)。
+
+### 多租户（可选）
+
+列级数据隔离，对齐 cool-admin-midway v8.0：
+
+```yaml
+cool:
+  tenant:
+    enable: true
+    urls: ["/admin/**", "/demo/**"]
+```
+
+- CRUD 自动按登录用户的 `tenantId` 过滤 / 写入
+- 业务代码零修改；`no_tenant()` 可临时关闭隔离
+- 详见 [docs/tenant.mdx](docs/tenant.mdx)
 
 ### 文件上传
 
