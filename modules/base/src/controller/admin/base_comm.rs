@@ -110,10 +110,7 @@ async fn upload<S: CrudState + FileState>(
     }
 
     match st.file_driver().upload(&filename, &bytes).await {
-        Ok(url) => Json(ok(serde_json::json!({
-            "url": url,
-            "mode": st.file_driver().mode_name(),
-        }))),
+        Ok(url) => Json(ok(serde_json::to_value(url).ok())),
         Err(e) => Json(fail(e.to_string())),
     }
 }
