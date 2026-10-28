@@ -1,8 +1,8 @@
 //! base_sys_param：系统参数缓存（对齐 service/base_sys_param.go）
 
-use cool_cache::CacheManager;
+use cool_core::cache::CacheManager;
+use cool_core::db::DbManager;
 use cool_core::service::query_rows_on;
-use cool_db::DbManager;
 use std::sync::OnceLock;
 use std::time::Duration;
 

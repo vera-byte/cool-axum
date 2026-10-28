@@ -14,7 +14,7 @@ pub mod service;
 
 use axum::Router;
 use cool_core::CrudState;
-use cool_db::TableDef;
+use cool_core::db::TableDef;
 
 /// 全部表定义
 pub fn all_tables() -> Vec<TableDef> {
@@ -40,14 +40,14 @@ pub fn spec() -> cool_core::ModuleSpec {
 }
 
 /// 模块初始化（对齐 dict/dict.go init()）
-pub async fn init(db: &cool_db::DbManager, _cache: cool_cache::CacheManager) {
+pub async fn init(db: &cool_core::db::DbManager, _cache: cool_core::cache::CacheManager) {
     tracing::debug!("module dict init start ...");
 
     for (table, raw) in [
         ("dict_type", initjson::DICT_TYPE),
         ("dict_info", initjson::DICT_INFO),
     ] {
-        match cool_db::fill_init_data(db, "default", table, raw).await {
+        match cool_core::db::fill_init_data(db, "default", table, raw).await {
             Ok(n) => tracing::debug!(table, inserted = n, "FillInitData"),
             Err(e) => tracing::error!(table, error = %e, "FillInitData 失败"),
         }

@@ -81,7 +81,7 @@ pub async fn authority_middleware(mut req: Request, next: Next) -> Response {
     if login_id.is_none()
         && let Some(tok) = extract_token(req.headers())
     {
-        login_id = cool_auth::get_login_id(&tok).await;
+        login_id = cool_core::auth::get_login_id(&tok).await;
     }
     let Some(login_id) = login_id else {
         return unauthorized("登陆失效～");
@@ -98,7 +98,7 @@ pub async fn authority_middleware(mut req: Request, next: Next) -> Response {
     }
 
     // 权限点含 `*` 放行
-    let perms = cool_auth::get_permissions(&login_id).await;
+    let perms = cool_core::auth::get_permissions(&login_id).await;
     if perms.iter().any(|p| p == "*") {
         return next.run(req).await;
     }
@@ -133,7 +133,7 @@ pub async fn authority_middleware(mut req: Request, next: Next) -> Response {
 /// 从请求头提取 token 并解析 login_id
 pub async fn login_id_from_headers(headers: &HeaderMap) -> Option<String> {
     let token = extract_token(headers)?;
-    cool_auth::get_login_id(&token).await
+    cool_core::auth::get_login_id(&token).await
 }
 
 fn extract_token(headers: &HeaderMap) -> Option<String> {

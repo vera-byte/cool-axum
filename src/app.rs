@@ -3,13 +3,13 @@
 use anyhow::Context;
 use axum::Json;
 use axum::routing::get;
-use cool_auth::AuthState as SaTokenState;
-use cool_cache::CacheManager;
-use cool_config::AppConfig;
 use cool_core::CrudState;
+use cool_core::auth::AuthState as SaTokenState;
+use cool_core::cache::CacheManager;
+use cool_core::config::AppConfig;
+use cool_core::db::DbManager;
+use cool_core::file::FileDriver;
 use cool_core::response::{BaseRes, ok};
-use cool_db::DbManager;
-use cool_file::FileDriver;
 use mod_task::TaskState;
 use mod_task::scheduler::Scheduler;
 use std::sync::Arc;
@@ -23,7 +23,7 @@ pub struct AppState {
     pub scheduler: Arc<Scheduler>,
     pub file: Arc<FileDriver>,
     pub cache: CacheManager,
-    pub raft: Option<cool_raft::Cluster>,
+    pub raft: Option<cool_core::raft::Cluster>,
 }
 
 impl CrudState for AppState {
@@ -83,7 +83,7 @@ pub async fn serve(config: AppConfig) -> anyhow::Result<()> {
             "" => format!("redis://{}/{}", r.address, r.db),
             pass => format!("redis://:{}@{}/{}", pass, r.address, r.db),
         });
-    let sa = cool_auth::init_sa_token(&config.modules.base.auth, redis_url.as_deref()).await;
+    let sa = cool_core::auth::init_sa_token(&config.modules.base.auth, redis_url.as_deref()).await;
 
     // 缓存管理器
     let cache = match &redis_url {
@@ -95,40 +95,34 @@ pub async fn serve(config: AppConfig) -> anyhow::Result<()> {
     };
 
     // 分布式全局事件总线（Redis Pub/Sub；无 Redis 降级进程内）
-    let event_bus = cool_core::event::EventBus::new(cool_core::event::EventBusConfig::new(
-        redis_url.clone(),
-        "cool",
-    ))
-    .await;
+    let event_bus =
+        cool_core::EventBus::new(cool_core::EventBusConfig::new(redis_url.clone(), "cool")).await;
     // 设为全局，供模块 init 注册处理器、notify_soft_delete 等无句柄调用点 emit
-    cool_core::event::init_global(event_bus.clone());
+    cool_core::init_global(event_bus.clone());
 
     // 模块启动钩子（缓存注入、参数预热、种子管理员等；可在此注册事件处理器）
     modules::boot_all(&db, cache.clone()).await;
     // 处理器注册完成后再启动 Redis 订阅
     event_bus.start_listener();
     // 启动生命周期事件（对齐 cool-admin-midway configuration 的 emit('onReady'/'onServerReady')）
-    {
-        let empty = serde_json::json!({});
-        event_bus
-            .emit(cool_core::event::Event::Ready, empty.clone())
-            .await;
-        event_bus
-            .emit(cool_core::event::Event::ServerReady, empty)
-            .await;
-    }
+    cool_core::event
+        .emit(cool_core::Event::Ready, serde_json::json!({}))
+        .await;
+    cool_core::event
+        .emit(cool_core::Event::ServerReady, serde_json::json!({}))
+        .await;
 
     // 文件上传驱动
-    let file = match cool_file::create_driver(&config.cool.file) {
+    let file = match cool_core::file::create_driver(&config.cool.file) {
         Ok(d) => {
             tracing::info!(mode = d.mode_name(), "文件上传驱动就绪");
             Arc::new(d)
         }
         Err(e) => {
             tracing::error!(error = %e, "文件上传驱动初始化失败，回退 local");
-            Arc::new(cool_file::FileDriver::Local(cool_file::LocalDriver::new(
-                &config.cool.file,
-            )))
+            Arc::new(cool_core::file::FileDriver::Local(
+                cool_core::file::LocalDriver::new(&config.cool.file),
+            ))
         }
     };
 
@@ -139,7 +133,7 @@ pub async fn serve(config: AppConfig) -> anyhow::Result<()> {
             tracing::error!(error = e, "Raft 配置校验失败，继续单机模式");
             None
         } else {
-            let peers: Vec<(cool_raft::NodeId, String)> = config
+            let peers: Vec<(cool_core::raft::NodeId, String)> = config
                 .raft
                 .peers
                 .iter()
@@ -153,7 +147,7 @@ pub async fn serve(config: AppConfig) -> anyhow::Result<()> {
             let data_dir = std::path::PathBuf::from(&config.raft.data_dir)
                 .join(format!("n{}", config.raft.node_id));
             tracing::info!(node_id = config.raft.node_id, data_dir = %data_dir.display(), "Raft 节点数据目录");
-            match cool_raft::start(
+            match cool_core::raft::start(
                 config.raft.node_id,
                 config.raft.self_addr.clone(),
                 peers,
@@ -231,8 +225,8 @@ pub async fn serve(config: AppConfig) -> anyhow::Result<()> {
 
     // Raft RPC 入站路由（/raft/vote|append|snapshot）必须始终挂载在开放组：
     // 未启用/启动失败时返回明确错误，避免对端收到 401 无法选举
-    extra_open = extra_open.merge(cool_raft::network::raft_routes(
-        cool_raft::network::RaftRpcState {
+    extra_open = extra_open.merge(cool_core::raft::network::raft_routes(
+        cool_core::raft::network::RaftRpcState {
             raft: state.raft.as_ref().map(|c| c.raft.clone()),
         },
     ));
@@ -324,13 +318,13 @@ async fn auto_migrate(db: &DbManager) {
     let kind = pool.kind();
 
     let mut tables = Vec::new();
-    tables.push(cool_db::base_sys_init_def());
+    tables.push(cool_core::db::base_sys_init_def());
     tables.extend(modules::all_tables());
 
     let mut ok = 0;
     let mut fail = 0;
     for def in &tables {
-        let sql = cool_db::build_create_table_sql(kind, def);
+        let sql = cool_core::db::build_create_table_sql(kind, def);
         match pool.execute(&sql).await {
             Ok(_) => ok += 1,
             Err(e) => {
@@ -339,7 +333,7 @@ async fn auto_migrate(db: &DbManager) {
             }
         }
         // 旧表补列（如新增 tenantId）
-        if let Err(e) = cool_db::ensure_columns(pool, kind, def).await {
+        if let Err(e) = cool_core::db::ensure_columns(pool, kind, def).await {
             tracing::warn!(table = %def.name, error = %e, "autoMigrate 同步列失败");
         }
     }
@@ -448,7 +442,7 @@ async fn forward_or_run_raft_admin<F, Fut, T>(
 ) -> axum::response::Response
 where
     T: serde::de::DeserializeOwned,
-    F: FnOnce(cool_raft::Cluster, T) -> Fut,
+    F: FnOnce(cool_core::raft::Cluster, T) -> Fut,
     Fut: std::future::Future<Output = Result<(), String>>,
 {
     use axum::body::Body;
@@ -518,7 +512,7 @@ where
             .into_response();
     };
 
-    match cool_raft::forward_to_leader(
+    match cool_core::raft::forward_to_leader(
         &leader_addr,
         method.as_str(),
         &path,

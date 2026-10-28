@@ -7,7 +7,7 @@
 
 use crate::funcs;
 use chrono::{DateTime, Utc};
-use cool_db::{DbManager, DbPool};
+use cool_core::db::{DbManager, DbPool};
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use tokio::task::JoinHandle;

@@ -4,7 +4,7 @@
 //! Rust 无副作用 init，由 `spec()` 声明表/种子，`route_groups()` 声明路由，
 //! 由 `modules` 注册中心统一装配。
 
-use cool_db::TableDef;
+use crate::db::TableDef;
 
 /// 一个业务模块的注册声明
 ///

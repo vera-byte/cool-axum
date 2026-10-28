@@ -8,7 +8,7 @@
 
 use axum::Router;
 use cool_core::RouteGroups;
-use cool_db::{DbManager, TableDef};
+use cool_core::db::{DbManager, TableDef};
 
 /// 已注册模块清单（路由工厂）
 ///
@@ -51,7 +51,7 @@ pub fn all_tables() -> Vec<TableDef> {
 }
 
 /// 模块启动钩子（对齐各模块 init()）
-pub async fn boot_all(db: &DbManager, cache: cool_cache::CacheManager) {
+pub async fn boot_all(db: &DbManager, cache: cool_core::cache::CacheManager) {
     mod_base::init(db, cache.clone()).await;
     mod_dict::init(db, cache.clone()).await;
     mod_demo::init(db, cache.clone()).await;
@@ -109,11 +109,11 @@ where
         .layer(axum::middleware::from_fn(
             mod_base::authority::authority_middleware,
         ))
-        .layer(cool_auth::check_login_layer());
+        .layer(cool_core::auth::check_login_layer());
 
     open.merge(comm)
         .merge(biz)
-        .layer(cool_auth::token_layer(sa))
+        .layer(cool_core::auth::token_layer(sa))
         .layer(axum::middleware::from_fn(
             mod_base::middleware::normalize_token_header,
         ))

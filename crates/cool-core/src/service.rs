@@ -2,10 +2,10 @@
 //!
 //! 只需提供表名 + QueryOp，即可获得 Add/Delete/Update/Info/List/Page 六个标准能力。
 
+use crate::db::{DbManager, DbPool};
 use crate::error::CoolError;
 use crate::query::{ListReq, PageReq, QueryOp};
 use crate::sql::{SqlBuilder, quote_ident};
-use cool_db::{DbManager, DbPool};
 use serde_json::{Map, Value, json};
 
 /// 写入前变换（密码哈希等）

@@ -444,12 +444,30 @@ impl EventBus {
     }
 }
 
-// ── 全局单例（供 `notify_soft_delete` 等无句柄调用点 emit） ──────────────
+// ── 全局单例与便捷 API ─────────────────────────────────────
+//
+// 用法（对应 cool.event.emit / global_emit / on）：
+// ```ignore
+// use cool_core::event;
+//
+// event::on("order:created", |data| Box::pin(async move { /* … */ }));
+// event::emit("order:created", json!({ "id": 1 })).await;
+// event::global_emit("order:created", json!({ "id": 1 }), DeliverMode::Broadcast).await;
+// ```
 
 static GLOBAL_BUS: RwLock<Option<EventBus>> = RwLock::new(None);
+/// 总线尚未初始化时缓存的处理器，`init_global` 时冲刷（保证注册顺序无关）
+static PENDING: RwLock<Vec<(String, Handler)>> = RwLock::new(Vec::new());
 
 /// 初始化并设置全局事件总线（app 启动时调用）
+///
+/// 会把此前 `on` 缓存的处理器冲刷进总线。
 pub fn init_global(bus: EventBus) {
+    if let Ok(mut pending) = PENDING.write() {
+        for (event, handler) in pending.drain(..) {
+            bus.on_handler(event, handler);
+        }
+    }
     if let Ok(mut g) = GLOBAL_BUS.write() {
         *g = Some(bus);
     }
@@ -458,6 +476,123 @@ pub fn init_global(bus: EventBus) {
 /// 获取全局事件总线（未初始化则 `None`）
 pub fn global() -> Option<EventBus> {
     GLOBAL_BUS.read().ok().and_then(|g| g.clone())
+}
+
+/// 注册事件处理器（`cool.event.on`）
+///
+/// 处理器 = `Fn(EventData) -> BoxFut`。总线未初始化时先缓存，初始化后自动生效。
+pub fn on<F>(event: impl AsRef<str>, handler: F)
+where
+    F: Fn(EventData) -> BoxFut + Send + Sync + 'static,
+{
+    on_handler(event, Arc::new(handler));
+}
+
+/// 注册已构建好的 `Handler`（`cool.event.on`）
+pub fn on_handler(event: impl AsRef<str>, handler: Handler) {
+    match global() {
+        Some(bus) => bus.on_handler(event, handler),
+        None => {
+            if let Ok(mut p) = PENDING.write() {
+                p.push((event.as_ref().to_string(), handler));
+            }
+        }
+    }
+}
+
+/// 发送事件，仅当前进程生效（`cool.event.emit`）
+pub async fn emit(event: impl AsRef<str>, data: impl Into<EventData>) {
+    if let Some(bus) = global() {
+        bus.emit(event, data).await;
+    }
+}
+
+/// 发送全局事件，跨进程、跨机器生效（`cool.event.global_emit`）
+///
+/// `mode`：`DeliverMode::Broadcast` 广播给所有实例 / `DeliverMode::Random` 随机一个（精确一次）。
+pub async fn global_emit(event: impl AsRef<str>, data: impl Into<EventData>, mode: DeliverMode) {
+    if let Some(bus) = global() {
+        bus.global_emit(event, data, mode).await;
+    }
+}
+
+/// 是否已降级为进程内模式
+pub fn is_local_only() -> bool {
+    global().map(|b| b.is_local_only()).unwrap_or(true)
+}
+
+/// 本实例 id
+pub fn instance_id() -> String {
+    global()
+        .map(|b| b.instance_id().to_string())
+        .unwrap_or_default()
+}
+
+// ── 便捷命名空间：`event.on` / `event.emit` / `event.global_emit` ─────────
+//
+// 用法（对应 cool.event.on / emit / global_emit）：
+// ```ignore
+// use cool_core::event;
+//
+// event::on("order:created", |data| Box::pin(async move { /* … */ }));
+// // 或拿到实例后：
+// cool_core::event.on("order:created", handler);
+// cool_core::event.emit("order:created", json!({ "id": 1 })).await;
+// cool_core::event.global_emit("order:created", data, DeliverMode::Broadcast).await;
+// ```
+
+/// 事件命名空间（方法式调用 `event.on` / `event.emit` / `event.global_emit`）
+#[derive(Debug, Clone, Copy, Default)]
+pub struct EventApi;
+
+impl EventApi {
+    /// 注册处理器（同 [`on`]）
+    pub fn on<F>(&self, event: impl AsRef<str>, handler: F)
+    where
+        F: Fn(EventData) -> BoxFut + Send + Sync + 'static,
+    {
+        on(event, handler);
+    }
+
+    /// 注册已构建好的 `Handler`（同 [`on_handler`]）
+    pub fn on_handler(&self, event: impl AsRef<str>, handler: Handler) {
+        on_handler(event, handler);
+    }
+
+    /// 仅本进程分发（同 [`emit`]）
+    pub async fn emit(&self, event: impl AsRef<str>, data: impl Into<EventData>) {
+        emit(event, data).await;
+    }
+
+    /// 分布式投递（同 [`global_emit`]）
+    pub async fn global_emit(
+        &self,
+        event: impl AsRef<str>,
+        data: impl Into<EventData>,
+        mode: DeliverMode,
+    ) {
+        global_emit(event, data, mode).await;
+    }
+
+    /// 是否已降级为进程内模式
+    pub fn is_local_only(&self) -> bool {
+        is_local_only()
+    }
+
+    /// 本实例 id
+    pub fn instance_id(&self) -> String {
+        instance_id()
+    }
+
+    /// 取全局总线（进阶：`start_listener` 等）
+    pub fn global(&self) -> Option<EventBus> {
+        global()
+    }
+
+    /// 初始化全局总线（框架启动时调用）
+    pub fn init_global(&self, bus: EventBus) {
+        init_global(bus);
+    }
 }
 
 #[cfg(test)]

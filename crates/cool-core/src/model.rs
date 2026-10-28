@@ -34,9 +34,9 @@ impl Model {
 }
 
 /// 基础字段 DDL 片段（供 autoMigrate 使用）
-pub fn base_columns() -> Vec<cool_db::ColumnMeta> {
+pub fn base_columns() -> Vec<crate::db::ColumnMeta> {
     vec![
-        cool_db::ColumnMeta {
+        crate::db::ColumnMeta {
             name: "id".into(),
             sql_type: "bigint".into(),
             not_null: true,
@@ -45,7 +45,7 @@ pub fn base_columns() -> Vec<cool_db::ColumnMeta> {
             auto_increment: true,
             default: None,
         },
-        cool_db::ColumnMeta {
+        crate::db::ColumnMeta {
             name: "createTime".into(),
             sql_type: "datetime".into(),
             not_null: true,
@@ -54,7 +54,7 @@ pub fn base_columns() -> Vec<cool_db::ColumnMeta> {
             auto_increment: false,
             default: None,
         },
-        cool_db::ColumnMeta {
+        crate::db::ColumnMeta {
             name: "updateTime".into(),
             sql_type: "datetime".into(),
             not_null: true,
@@ -63,7 +63,7 @@ pub fn base_columns() -> Vec<cool_db::ColumnMeta> {
             auto_increment: false,
             default: None,
         },
-        cool_db::ColumnMeta {
+        crate::db::ColumnMeta {
             name: "deleteTime".into(),
             sql_type: "datetime".into(),
             not_null: false,

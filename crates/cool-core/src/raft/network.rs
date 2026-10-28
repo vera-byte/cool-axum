@@ -3,7 +3,7 @@
 //! - `HttpNetworkFactory`：出站 RPC（reqwest）
 //! - `raft_routes`：入站 RPC（axum）
 
-use crate::{NodeId, PeerMap, TypeConfig};
+use crate::raft::{NodeId, PeerMap, TypeConfig};
 use axum::extract::State;
 use axum::routing::post;
 use axum::{Json, Router};
@@ -129,7 +129,7 @@ impl RaftNetworkV2<TypeConfig> for HttpConnection {
 #[derive(Clone)]
 pub struct RaftRpcState {
     /// None = Raft 未启用或启动失败（仍须挂载 RPC 路由，避免对端收到 401）
-    pub raft: Option<crate::Raft>,
+    pub raft: Option<crate::raft::Raft>,
 }
 
 /// RPC 路由：挂载 /raft/*（必须在开放路由组，免鉴权）

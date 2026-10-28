@@ -5,7 +5,7 @@ mod log_rotate;
 mod openapi;
 
 use anyhow::Context;
-use cool_config::{AppConfig, LoggerConfig};
+use cool_core::config::{AppConfig, LoggerConfig};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]

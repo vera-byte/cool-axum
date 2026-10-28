@@ -3,7 +3,7 @@
 //! 菜单/权限查询逻辑集中在 base_sys_perms，本文件提供菜单专用入口。
 
 use super::base_sys_perms;
-use cool_db::DbManager;
+use cool_core::db::DbManager;
 use serde_json::Value;
 
 /// 获取菜单权限点

@@ -9,8 +9,8 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use cool_core::CrudState;
+use cool_core::file::FileDriver;
 use cool_core::response::{BaseRes, fail, ok};
-use cool_file::FileDriver;
 
 use crate::middleware::authority::login_id_from_headers;
 use crate::service::{base_sys_perms, base_sys_user};
@@ -71,7 +71,7 @@ async fn refresh_perms<S: CrudState + FileState>(
     };
     let uid: i64 = login_id.parse().unwrap_or(0);
     base_sys_perms::refresh_perms(CrudState::db(&st), uid).await;
-    let perms = cool_auth::get_permissions(&login_id).await;
+    let perms = cool_core::auth::get_permissions(&login_id).await;
     Json(ok(serde_json::json!({ "perms": perms }))).into_response()
 }
 

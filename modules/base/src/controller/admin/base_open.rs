@@ -54,10 +54,10 @@ async fn login_handler<S: CrudState + FileState>(
             if roles.is_empty() && user.username == "admin" {
                 roles = vec!["admin".to_string()];
             }
-            cool_auth::set_permissions(&login_id, perms.clone()).await;
-            cool_auth::set_roles(&login_id, roles).await;
+            cool_core::auth::set_permissions(&login_id, perms.clone()).await;
+            cool_core::auth::set_roles(&login_id, roles).await;
 
-            match cool_auth::login(&login_id).await {
+            match cool_core::auth::login(&login_id).await {
                 Ok(token) => Json(base_sys_login::login_payload(&user, &token, perms)),
                 Err(e) => Json(fail(format!("登录失败: {e}"))),
             }
@@ -69,9 +69,9 @@ async fn login_handler<S: CrudState + FileState>(
 /// POST /base/logout、/admin/base/open/logout
 async fn logout_handler(headers: HeaderMap) -> Json<BaseRes> {
     if let Some(token) = token_from_headers(&headers)
-        && let Some(login_id) = cool_auth::get_login_id(&token).await
+        && let Some(login_id) = cool_core::auth::get_login_id(&token).await
     {
-        let _ = cool_auth::logout_by_login_id(&login_id).await;
+        let _ = cool_core::auth::logout_by_login_id(&login_id).await;
     }
     Json(ok(serde_json::json!({})))
 }

@@ -1,7 +1,7 @@
 //! base_sys_perms：权限点/菜单/刷新（对齐 service/base_sys_perms.go + base_sys_menu.go）
 
+use cool_core::db::{DbManager, DbPool};
 use cool_core::service::query_rows_on;
-use cool_db::{DbManager, DbPool};
 use serde_json::Value;
 
 /// 查询用户角色标签
@@ -138,13 +138,13 @@ pub async fn refresh_perms(db: &DbManager, user_id: i64) {
     if roles.is_empty() && user_id == 1 {
         roles = vec!["admin".to_string()];
     }
-    cool_auth::set_permissions(&login_id, perms).await;
-    cool_auth::set_roles(&login_id, roles).await;
+    cool_core::auth::set_permissions(&login_id, perms).await;
+    cool_core::auth::set_roles(&login_id, roles).await;
 }
 
 /// permmenu 响应（perms + menus）
 pub async fn permmenu(db: &DbManager, user_id: i64) -> serde_json::Value {
-    let perms = cool_auth::get_permissions(&user_id.to_string()).await;
+    let perms = cool_core::auth::get_permissions(&user_id.to_string()).await;
     let menus = get_user_menus(db, user_id).await;
     serde_json::json!({ "perms": perms, "menus": menus })
 }

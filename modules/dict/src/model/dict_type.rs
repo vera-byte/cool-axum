@@ -1,6 +1,6 @@
 //! dict_type（对齐 model/dict_type.go）
 
-use cool_db::{ColumnMeta, TableDef};
+use cool_core::db::{ColumnMeta, TableDef};
 
 fn col(name: &str, sql_type: &str, not_null: bool, comment: &str) -> ColumnMeta {
     ColumnMeta {

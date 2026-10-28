@@ -1,7 +1,7 @@
 //! base_sys_log：操作日志服务（对齐 service/base_sys_log.go）
 
+use cool_core::db::DbManager;
 use cool_core::service::query_rows_on;
-use cool_db::DbManager;
 
 /// 清理日志（deep=true 连失败日志一起清，否则清 30 天前的成功日志）
 pub async fn clear(db: &DbManager, deep: bool) -> Result<u64, String> {

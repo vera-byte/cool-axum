@@ -7,7 +7,7 @@ use axum::extract::Request;
 use axum::http::{HeaderMap, StatusCode};
 use axum::middleware::Next;
 use axum::response::Response;
-use cool_db::DbManager;
+use cool_core::db::DbManager;
 use std::sync::OnceLock;
 use std::time::Instant;
 

@@ -1,7 +1,7 @@
 //! base_sys_role：角色服务（对齐 service/base_sys_role.go）
 
+use cool_core::db::DbManager;
 use cool_core::service::query_rows_on;
-use cool_db::DbManager;
 
 /// 按用户查角色 ID 列表
 pub async fn get_by_user(db: &DbManager, user_id: i64) -> Vec<i64> {

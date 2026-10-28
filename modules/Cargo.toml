@@ -9,9 +9,6 @@ path = "modules.rs"
 
 [dependencies]
 cool-core = { workspace = true }
-cool-db = { workspace = true }
-cool-cache = { workspace = true }
-cool-auth = { workspace = true }
 axum = { workspace = true }
 tracing = { workspace = true }
 sa-token-plugin-axum = { workspace = true }

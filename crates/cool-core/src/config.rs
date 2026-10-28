@@ -170,7 +170,7 @@ pub struct CoolConfig {
     pub eps: bool,
     #[serde(default)]
     pub file: FileConfig,
-    /// 多租户（v8.0，对齐 cool-admin-midway）
+    /// 多租户
     #[serde(default)]
     pub tenant: TenantConfig,
 }

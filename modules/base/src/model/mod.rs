@@ -6,7 +6,7 @@
 
 pub mod initjson;
 
-use cool_db::TableDef;
+use cool_core::db::TableDef;
 
 fn col(
     name: &str,
@@ -14,8 +14,8 @@ fn col(
     not_null: bool,
     primary_key: bool,
     comment: &str,
-) -> cool_db::ColumnMeta {
-    cool_db::ColumnMeta {
+) -> cool_core::db::ColumnMeta {
+    cool_core::db::ColumnMeta {
         name: name.into(),
         sql_type: sql_type.into(),
         not_null,
@@ -33,8 +33,8 @@ fn col_def(
     not_null: bool,
     comment: &str,
     default: &str,
-) -> cool_db::ColumnMeta {
-    cool_db::ColumnMeta {
+) -> cool_core::db::ColumnMeta {
+    cool_core::db::ColumnMeta {
         name: name.into(),
         sql_type: sql_type.into(),
         not_null,
@@ -47,7 +47,7 @@ fn col_def(
 
 /// 公共基础列：id / createTime / updateTime / deleteTime / tenantId
 /// 对齐 cool-admin-midway BaseEntity（tenantId 为多租户隔离列）
-pub fn base_cols() -> Vec<cool_db::ColumnMeta> {
+pub fn base_cols() -> Vec<cool_core::db::ColumnMeta> {
     vec![
         col("id", "bigint", true, true, "主键"),
         col("createTime", "datetime", true, false, "创建时间"),
@@ -57,7 +57,7 @@ pub fn base_cols() -> Vec<cool_db::ColumnMeta> {
     ]
 }
 
-fn table(name: &str, mut cols: Vec<cool_db::ColumnMeta>) -> TableDef {
+fn table(name: &str, mut cols: Vec<cool_core::db::ColumnMeta>) -> TableDef {
     let mut all = base_cols();
     all.append(&mut cols);
     TableDef {

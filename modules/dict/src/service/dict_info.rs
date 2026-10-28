@@ -1,7 +1,7 @@
 //! dict_info 服务（对齐 service/dict_info.go）
 
+use cool_core::db::DbManager;
 use cool_core::service::query_rows_on;
-use cool_db::DbManager;
 use serde_json::{Map, Value, json};
 
 /// Data：获得字典数据（对齐 DictInfoService.Data）

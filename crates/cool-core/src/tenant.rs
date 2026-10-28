@@ -149,10 +149,8 @@ pub fn notify_soft_delete(rec: SoftDeleteRecord) {
         h(rec.clone());
     }
     // 经事件总线触发 onSoftDelete（本进程，fire-and-forget）
-    if let Some(bus) = crate::event::global() {
-        let data = serde_json::to_value(&rec).unwrap_or(serde_json::Value::Null);
-        tokio::spawn(async move {
-            bus.emit(crate::event::Event::SoftDelete, data).await;
-        });
-    }
+    let data = serde_json::to_value(&rec).unwrap_or(serde_json::Value::Null);
+    tokio::spawn(async move {
+        crate::event.emit(crate::Event::SoftDelete, data).await;
+    });
 }

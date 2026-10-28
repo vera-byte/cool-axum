@@ -571,39 +571,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "cool-auth"
-version = "0.1.0"
-dependencies = [
- "axum",
- "bcrypt",
- "cool-config",
- "cool-core",
- "cool-db",
- "md5",
- "sa-token-plugin-axum",
- "sa-token-storage-memory",
- "sa-token-storage-redis",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "cool-axum"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
  "chrono",
- "cool-auth",
- "cool-cache",
- "cool-config",
  "cool-core",
- "cool-db",
- "cool-file",
- "cool-raft",
  "mod-base",
  "mod-demo",
  "mod-dict",
@@ -621,71 +595,30 @@ dependencies = [
 ]
 
 [[package]]
-name = "cool-cache"
-version = "0.1.0"
-dependencies = [
- "redis 0.27.6",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "cool-config"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "serde_yaml",
- "thiserror",
- "tracing",
-]
-
-[[package]]
 name = "cool-core"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "axum",
- "chrono",
- "cool-config",
- "cool-db",
- "futures-util",
- "redis 0.27.6",
- "serde",
- "serde_json",
- "sqlx",
- "thiserror",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "cool-db"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "cool-config",
- "serde_json",
- "sqlx",
- "thiserror",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "cool-file"
-version = "0.1.0"
-dependencies = [
- "axum",
+ "bcrypt",
+ "byteorder",
  "bytes",
  "chrono",
- "cool-config",
+ "futures",
+ "futures-util",
+ "md5",
+ "openraft",
+ "openraft-memstore",
+ "redis 0.27.6",
  "reqwest",
+ "rocksdb",
+ "sa-token-plugin-axum",
+ "sa-token-storage-memory",
+ "sa-token-storage-redis",
  "serde",
  "serde_json",
+ "serde_yaml",
+ "sqlx",
  "thiserror",
  "tokio",
  "tracing",
@@ -697,33 +630,13 @@ name = "cool-gen"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "cool-config",
- "cool-db",
+ "cool-core",
  "serde",
  "serde_json",
  "sqlx",
  "tokio",
  "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "cool-raft"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "byteorder",
- "futures",
- "openraft",
- "openraft-memstore",
- "reqwest",
- "rocksdb",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tracing",
 ]
 
 [[package]]
@@ -1916,12 +1829,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "base64 0.22.1",
- "cool-auth",
- "cool-cache",
- "cool-config",
  "cool-core",
- "cool-db",
- "cool-file",
  "sa-token-plugin-axum",
  "serde",
  "serde_json",
@@ -1935,9 +1843,7 @@ name = "mod-demo"
 version = "0.1.0"
 dependencies = [
  "axum",
- "cool-cache",
  "cool-core",
- "cool-db",
  "serde_json",
  "tracing",
 ]
@@ -1947,9 +1853,7 @@ name = "mod-dict"
 version = "0.1.0"
 dependencies = [
  "axum",
- "cool-cache",
  "cool-core",
- "cool-db",
  "serde",
  "serde_json",
  "tracing",
@@ -1961,11 +1865,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "chrono",
- "cool-auth",
- "cool-cache",
  "cool-core",
- "cool-db",
- "cool-file",
  "serde",
  "serde_json",
  "tokio",
@@ -1977,9 +1877,7 @@ name = "mod-space"
 version = "0.1.0"
 dependencies = [
  "axum",
- "cool-cache",
  "cool-core",
- "cool-db",
  "serde_json",
  "tracing",
 ]
@@ -1990,9 +1888,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "chrono",
- "cool-cache",
  "cool-core",
- "cool-db",
  "cron",
  "serde",
  "serde_json",
@@ -2005,10 +1901,7 @@ name = "modules"
 version = "0.1.0"
 dependencies = [
  "axum",
- "cool-auth",
- "cool-cache",
  "cool-core",
- "cool-db",
  "mod-base",
  "mod-demo",
  "mod-dict",

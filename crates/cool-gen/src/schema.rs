@@ -1,6 +1,6 @@
 //! 数据库表结构内省
 
-use cool_db::{DbManager, DbPool};
+use cool_core::db::{DbManager, DbPool};
 use serde::Serialize;
 
 /// 列元信息（从 information_schema / SHOW COLUMNS 读取）

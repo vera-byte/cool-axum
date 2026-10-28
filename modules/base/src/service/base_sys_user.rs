@@ -1,8 +1,8 @@
 //! base_sys_user：用户查询 / 密码（对齐 service/base_sys_user.go）
 
-use cool_auth::{hash_password, verify_password};
+use cool_core::auth::{hash_password, verify_password};
+use cool_core::db::DbManager;
 use cool_core::service::query_rows_on;
-use cool_db::DbManager;
 use serde_json::Value;
 
 /// 登录用户信息

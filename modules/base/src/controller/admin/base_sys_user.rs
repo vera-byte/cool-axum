@@ -112,7 +112,7 @@ async fn update_user<S: CrudState + FileState>(
                 if let Ok(pool) = CrudState::db(&st).default_pool() {
                     let _ = pool.execute(&user_svc::bump_password_v_sql(id)).await;
                 }
-                let _ = cool_auth::logout_by_login_id(&id.to_string()).await;
+                let _ = cool_core::auth::logout_by_login_id(&id.to_string()).await;
                 tracing::info!(user_id = id, "密码已更新，旧会话已吊销");
             }
             Json(ok(v))

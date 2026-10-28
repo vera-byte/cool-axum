@@ -5,7 +5,7 @@
 //!
 //! 驱动由 `cool.file.mode` 配置选择：local | minio | oss
 
-use cool_config::{FileConfig, OssConfig};
+use crate::config::{FileConfig, OssConfig};
 use std::path::PathBuf;
 
 #[derive(Debug, thiserror::Error)]

@@ -1,6 +1,6 @@
 //! funcs：任务函数注册（对齐 modules/base/funcs/base_sys_log_clear.go）
 
-use cool_db::DbManager;
+use cool_core::db::DbManager;
 use std::sync::OnceLock;
 
 static DB: OnceLock<DbManager> = OnceLock::new();

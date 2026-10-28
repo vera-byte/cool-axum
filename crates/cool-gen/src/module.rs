@@ -104,7 +104,7 @@ pub mod utils;
 
 use axum::Router;
 use cool_core::CrudState;
-use cool_db::TableDef;
+use cool_core::db::TableDef;
 
 /// 全部表定义
 pub fn all_tables() -> Vec<TableDef> {{
@@ -184,7 +184,7 @@ pub mod initjson;
 pub use {entity}::*;
 
 /// 全部表
-pub fn all_tables() -> Vec<cool_db::TableDef> {{
+pub fn all_tables() -> Vec<cool_core::db::TableDef> {{
     vec![{entity}()]
 }}
 "#
@@ -196,7 +196,7 @@ pub fn all_tables() -> Vec<cool_db::TableDef> {{
         &format!(
             r#"//! {entity} 表（由 cool-gen 生成，可按业务扩展字段）
 
-use cool_db::{{ColumnMeta, TableDef}};
+use cool_core::db::{{ColumnMeta, TableDef}};
 
 fn col(name: &str, sql_type: &str, not_null: bool, comment: &str) -> ColumnMeta {{
     ColumnMeta {{
@@ -241,7 +241,7 @@ pub fn {entity}() -> TableDef {{
         &format!(
             r#"//! initjson 种子数据（放 JSON 到 ../initjson/，按需 include_str!）
 //!
-//! 通过 cool_db::fill_init_data 按 (group, table) 去重填充。
+//! 通过 cool_core::db::fill_init_data 按 (group, table) 去重填充。
 
 // 示例：
 // pub const SEED: &str = include_str!("../../initjson/{entity}.json");
@@ -272,7 +272,7 @@ pub use {entity}::*;
 //! 通用 CRUD 走 CrudService；此处放业务扩展逻辑。
 
 use cool_core::service::query_rows_on;
-use cool_db::DbManager;
+use cool_core::db::DbManager;
 use serde_json::Value;
 
 /// 示例：按名称查一条

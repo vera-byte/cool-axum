@@ -2,11 +2,11 @@
 
 use super::base_sys_user::LoginUser;
 use crate::service::captcha;
-use cool_auth::{hash_password, verify_password};
-use cool_cache::CacheManager;
+use cool_core::auth::{hash_password, verify_password};
+use cool_core::cache::CacheManager;
+use cool_core::db::DbManager;
 use cool_core::response::BaseRes;
 use cool_core::service::query_rows_on;
-use cool_db::DbManager;
 use serde_json::json;
 use std::sync::OnceLock;
 use std::time::Duration;

@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 /// 调用方持有的应用状态（含 DbManager）
 pub trait CrudState: Clone + Send + Sync + 'static {
-    fn db(&self) -> &cool_db::DbManager;
+    fn db(&self) -> &crate::db::DbManager;
 }
 
 /// API 白名单（对齐 Controller.Api）

@@ -3,8 +3,8 @@
 use axum::Router;
 use cool_core::QueryOp;
 use cool_core::controller::{ApiAllow, crud_router};
+use cool_core::db::{ColumnMeta, TableDef};
 use cool_core::service::CrudService;
-use cool_db::{ColumnMeta, TableDef};
 
 fn col(name: &str, sql_type: &str, not_null: bool, comment: &str) -> ColumnMeta {
     ColumnMeta {
@@ -110,7 +110,7 @@ pub fn spec() -> cool_core::ModuleSpec {
 }
 
 /// 模块初始化（对齐 space/space.go init()）
-pub async fn init(_db: &cool_db::DbManager, _cache: cool_cache::CacheManager) {
+pub async fn init(_db: &cool_core::db::DbManager, _cache: cool_core::cache::CacheManager) {
     tracing::debug!("module space init start ...");
     tracing::debug!("module space init finished ...");
 }

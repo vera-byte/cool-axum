@@ -1,8 +1,8 @@
 //! recycle 服务：记录 / 恢复 / 清理（对齐 midway RecycleDataService）
 
+use cool_core::db::{DbManager, DbPool};
 use cool_core::service::query_rows_on;
 use cool_core::tenant::SoftDeleteRecord;
-use cool_db::{DbManager, DbPool};
 use serde_json::{Value, json};
 
 /// 软删除 → 写入回收站

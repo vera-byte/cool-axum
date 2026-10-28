@@ -2,7 +2,7 @@
 //!
 //! 提供连接池管理、分组数据源、统一查询入口。
 
-use cool_config::DatabaseEntry;
+use crate::config::DatabaseEntry;
 use sqlx::mysql::MySqlPoolOptions;
 use sqlx::postgres::PgPoolOptions;
 use std::collections::HashMap;

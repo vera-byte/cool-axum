@@ -32,7 +32,7 @@ pub use service::base_sys_login as login;
 pub use service::base_sys_param as param_svc;
 pub use service::base_sys_perms as perms;
 pub use service::base_sys_user as user_svc;
-pub use service::captcha;
+pub use service::captcha; // 事件类型
 
 use axum::Router;
 use controller::admin::base_comm::FileState;
@@ -62,8 +62,8 @@ pub fn spec() -> cool_core::ModuleSpec {
 /// 模块初始化（对齐 base/base.go init()）
 ///
 /// 逐表 FillInitData + 模块专属启动
-pub async fn init(db: &cool_db::DbManager, cache: cool_cache::CacheManager) {
-    tracing::debug!("module base init start ...");
+pub async fn init(db: &cool_core::db::DbManager, cache: cool_core::cache::CacheManager) {
+    tracing::info!("module base init start ...");
 
     // FillInitData：initjson 种子数据（base_sys_init 去重，仅首次）
     for (table, raw) in [
@@ -77,7 +77,7 @@ pub async fn init(db: &cool_db::DbManager, cache: cool_cache::CacheManager) {
         ("base_sys_param", initjson::PARAM),
         ("base_sys_conf", initjson::CONF),
     ] {
-        match cool_db::fill_init_data(db, "default", table, raw).await {
+        match cool_core::db::fill_init_data(db, "default", table, raw).await {
             Ok(n) => tracing::debug!(table, inserted = n, "FillInitData"),
             Err(e) => tracing::error!(table, error = %e, "FillInitData 失败"),
         }

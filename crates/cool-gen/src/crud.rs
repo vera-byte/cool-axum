@@ -9,7 +9,7 @@
 
 use crate::schema::{ColumnInfo, describe_table};
 use anyhow::Context;
-use cool_db::DbManager;
+use cool_core::db::DbManager;
 use std::fmt::Write as _;
 
 pub async fn generate_crud(db: &DbManager, table: &str, module: &str) -> anyhow::Result<()> {
@@ -48,7 +48,7 @@ pub async fn generate_crud(db: &DbManager, table: &str, module: &str) -> anyhow:
 fn render_tables(table: &str, columns: &[ColumnInfo]) -> String {
     let mut out = String::new();
     let _ = writeln!(out, "//! `{table}` 表结构（由 cool-gen 自动生成）\n");
-    out.push_str("use cool_db::{ColumnMeta, TableDef};\n\n");
+    out.push_str("use cool_core::db::{ColumnMeta, TableDef};\n\n");
 
     // 判断是否有基础列
     let names: Vec<&str> = columns.iter().map(|c| c.name.as_str()).collect();

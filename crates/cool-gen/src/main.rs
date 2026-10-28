@@ -17,8 +17,8 @@ mod module;
 mod schema;
 
 use anyhow::{Context, bail};
-use cool_config::AppConfig;
-use cool_db::DbManager;
+use cool_core::config::AppConfig;
+use cool_core::db::DbManager;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

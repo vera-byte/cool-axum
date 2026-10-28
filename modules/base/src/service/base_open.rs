@@ -1,7 +1,7 @@
 //! base_open：开放服务（对齐 service/base_open.go）—— EPS 元数据
 
+use cool_core::db::DbManager;
 use cool_core::service::query_rows_on;
-use cool_db::DbManager;
 
 /// AdminEPS：前端 EPS 元数据（简化版：返回各表列信息）
 pub async fn admin_eps(db: &DbManager) -> serde_json::Value {

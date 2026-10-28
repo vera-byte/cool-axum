@@ -348,7 +348,7 @@ fn read_logs_err(e: impl Error + 'static) -> io::Error {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::TypeConfig;
+    use crate::raft::TypeConfig;
     use openraft::storage::RaftLogStorage;
     use std::path::PathBuf;
 

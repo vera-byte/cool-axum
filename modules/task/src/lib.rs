@@ -12,9 +12,9 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use cool_core::QueryOp;
 use cool_core::controller::{ApiAllow, crud_router};
+use cool_core::db::{ColumnMeta, TableDef};
 use cool_core::response::{BaseRes, fail, ok};
 use cool_core::service::CrudService;
-use cool_db::{ColumnMeta, TableDef};
 use scheduler::Scheduler;
 use serde_json::{Map, Value, json};
 
@@ -263,11 +263,11 @@ pub fn spec() -> cool_core::ModuleSpec {
 }
 
 /// 模块初始化（对齐 task/task.go init()）
-pub async fn init(db: &cool_db::DbManager, _cache: cool_cache::CacheManager) {
+pub async fn init(db: &cool_core::db::DbManager, _cache: cool_core::cache::CacheManager) {
     tracing::debug!("module task init start ...");
 
     // FillInitData
-    match cool_db::fill_init_data(db, "default", "task_info", initjson::TASK_INFO).await {
+    match cool_core::db::fill_init_data(db, "default", "task_info", initjson::TASK_INFO).await {
         Ok(n) => tracing::debug!(table = "task_info", inserted = n, "FillInitData"),
         Err(e) => tracing::error!(error = %e, "FillInitData 失败"),
     }

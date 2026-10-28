@@ -48,8 +48,8 @@ impl CoolError {
     }
 }
 
-impl From<cool_db::DbError> for CoolError {
-    fn from(e: cool_db::DbError) -> Self {
+impl From<crate::db::DbError> for CoolError {
+    fn from(e: crate::db::DbError) -> Self {
         CoolError::Internal(e.to_string())
     }
 }

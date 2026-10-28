@@ -12,13 +12,7 @@ path = "src/main.rs"
 [workspace]
 resolver = "2"
 members = [
-    "crates/cool-config",
-    "crates/cool-db",
     "crates/cool-core",
-    "crates/cool-auth",
-    "crates/cool-cache",
-    "crates/cool-file",
-    "crates/cool-raft",
     "crates/cool-gen",
     "modules",
     "modules/base",
@@ -35,13 +29,7 @@ edition = "2024"
 license = "MIT"
 
 [workspace.dependencies]
-cool-config = { path = "crates/cool-config" }
-cool-db = { path = "crates/cool-db" }
 cool-core = { path = "crates/cool-core" }
-cool-auth = { path = "crates/cool-auth" }
-cool-cache = { path = "crates/cool-cache" }
-cool-file = { path = "crates/cool-file" }
-cool-raft = { path = "crates/cool-raft" }
 modules = { path = "modules" }
 mod-base = { path = "modules/base" }
 mod-dict = { path = "modules/dict" }
@@ -77,13 +65,7 @@ sa-token-storage-redis = { git = "https://github.com/sa-tokens/sa-token-rust", p
 sa-token-storage-memory = { git = "https://github.com/sa-tokens/sa-token-rust", package = "sa-token-storage-memory" }
 
 [dependencies]
-cool-config = { workspace = true }
-cool-db = { workspace = true }
 cool-core = { workspace = true }
-cool-auth = { workspace = true }
-cool-cache = { workspace = true }
-cool-file = { workspace = true }
-cool-raft = { workspace = true }
 mod-base = { workspace = true }
 chrono = { workspace = true }
 mod-dict = { workspace = true }

@@ -6,7 +6,7 @@
 //! - SaTokenLayer 提取登录态
 //! - SaCheckLoginLayer / SaCheckPermissionLayer 鉴权与权限点
 
-use cool_config::AuthConfig;
+use crate::config::AuthConfig;
 use sa_token_plugin_axum::{
     MemoryStorage, RedisStorage, SaCheckLoginLayer, SaCheckPermissionLayer, SaTokenLayer,
     SaTokenState, StpUtil, TokenStyle, TokenValue,

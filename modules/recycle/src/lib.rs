@@ -12,11 +12,9 @@ pub mod service;
 pub mod utils;
 
 use axum::Router;
-use cool_core::CrudState;
-use cool_db::TableDef;
-
+use cool_core::*;
 /// 全部表定义
-pub fn all_tables() -> Vec<TableDef> {
+pub fn all_tables() -> Vec<db::TableDef> {
     model::all_tables()
 }
 
@@ -38,26 +36,21 @@ pub fn spec() -> cool_core::ModuleSpec {
 }
 
 /// 启动钩子：注册软删除回收钩子 + 日清定时任务
-pub async fn init(db: &cool_db::DbManager, _cache: cool_cache::CacheManager) {
+pub async fn init(db: &cool_core::db::DbManager, _cache: cool_core::cache::CacheManager) {
     tracing::debug!("module recycle init start ...");
 
     // 软删除 → 回收站（对齐 midway `@Event(EVENT.SOFT_DELETE) softDelete(params)`）
     // 处理器按事件名注册，由 notify_soft_delete 经事件总线触发
-    if let Some(bus) = cool_core::event::global() {
+    {
         let db_hook = db.clone();
-        bus.on(
-            cool_core::event::Event::SoftDelete,
-            move |data: cool_core::event::EventData| {
-                let db = db_hook.clone();
-                Box::pin(async move {
-                    if let Ok(rec) =
-                        serde_json::from_value::<cool_core::tenant::SoftDeleteRecord>(data)
-                    {
-                        service::data::record(&db, rec).await;
-                    }
-                })
-            },
-        );
+        event.on(Event::SoftDelete, move |data: EventData| {
+            let db = db_hook.clone();
+            Box::pin(async move {
+                if let Ok(rec) = serde_json::from_value::<tenant::SoftDeleteRecord>(data) {
+                    service::data::record(&db, rec).await;
+                }
+            })
+        });
     }
 
     // 每日清理过期回收数据（对齐 midway schedule）

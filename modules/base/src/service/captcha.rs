@@ -5,7 +5,7 @@
 //! - 开放接口，无需登录
 
 use base64::Engine;
-use cool_cache::CacheManager;
+use cool_core::cache::CacheManager;
 use std::sync::OnceLock;
 use std::time::Duration;
 
