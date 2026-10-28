@@ -1,0 +1,60 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug cool-axum",
+      "cargo": {
+        "args": ["build", "--package=cool-axum", "--bin=cool-axum"],
+        "filter": {
+          "name": "cool-axum",
+          "kind": "bin"
+        }
+      },
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "RUST_LOG": "info"
+      }
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug cool-axum (custom config)",
+      "cargo": {
+        "args": ["build", "--package=cool-axum", "--bin=cool-axum"],
+        "filter": {
+          "name": "cool-axum",
+          "kind": "bin"
+        }
+      },
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "COOL_CONFIG": "${input:configPath}",
+        "RUST_LOG": "debug"
+      }
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug cool-gen",
+      "cargo": {
+        "args": ["build", "--package=cool-gen", "--bin=cool-gen"],
+        "filter": {
+          "name": "cool-gen",
+          "kind": "bin"
+        }
+      },
+      "cwd": "${workspaceFolder}",
+      "args": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "configPath",
+      "type": "promptString",
+      "description": "配置文件路径（COOL_CONFIG）",
+      "default": "config.yaml"
+    }
+  ]
+}
