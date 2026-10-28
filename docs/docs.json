@@ -25,6 +25,7 @@
           "authentication",
           "database",
           "tenant",
+          "event",
           "modules",
           "codegen"
         ]

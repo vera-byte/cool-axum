@@ -68,7 +68,7 @@ curl -X POST http://127.0.0.1:8001/admin/base/open/logout \
 ## 中间件
 
 ```rust
-use cool_auth::{token_layer, check_login_layer, check_permission_layer};
+use cool_core::auth::{token_layer, check_login_layer, check_permission_layer};
 
 let app = public_routes
     .merge(protected_routes.layer(check_login_layer()))
@@ -95,11 +95,11 @@ HTTP/1.1 401 Unauthorized
 
 ```rust
 // 设置（M4 从 base_sys_menu.perms 加载）
-cool_auth::set_permissions("1", vec!["user:list".into(), "user:delete".into()]).await;
-cool_auth::set_roles("1", vec!["admin".into()]).await;
+cool_core::auth::set_permissions("1", vec!["user:list".into(), "user:delete".into()]).await;
+cool_core::auth::set_roles("1", vec!["admin".into()]).await;
 
 // 校验
-cool_auth::has_permission("1", "user:list").await;
+cool_core::auth::has_permission("1", "user:list").await;
 ```
 
 也可用 Layer 做路由级权限：

@@ -1,13 +1,13 @@
 ---
 title: 分布式事件
-description: 全局事件总线（Redis Pub/Sub），对齐 cool-admin-midway 事件框架 + DistributedEventBus
+description: 全局事件总线（Redis Pub/Sub）的使用方式 —— event.on / event.emit / event.global_emit
 ---
 
 ## 是什么
 
-事件总线让**模块之间解耦通信**：一方 `emit` 发出事件，一方注册处理器接收。cool-axum 的事件总线支持**分布式投递**——同一事件可广播给集群所有机器，或随机投递给其中一个。
+事件总线让**模块之间解耦通信**：一方 `emit` 发出事件，一方 `on` 注册处理器接收。cool-axum 的事件总线支持**分布式投递**——同一事件可广播给集群所有机器，或随机投递给其中一个。
 
-对齐 cool-admin-midway 的 `@CoolEvent()` / `@Event(name)` 事件框架，并以其 `DistributedEventBus`（Redis Pub/Sub）作为传输层，跨进程、跨机器均生效。
+对齐 cool-admin-midway 的 `@CoolEvent()` / `@Event(name)` 事件框架，以 Redis Pub/Sub 作为传输层，跨进程、跨机器均生效。
 
 ```text
                  ┌───────────────────────────────────────────┐
@@ -22,11 +22,41 @@ description: 全局事件总线（Redis Pub/Sub），对齐 cool-admin-midway �
 
 | 特点 | 说明 |
 |------|------|
-| **本地事件** | `emit` 仅当前进程分发 |
-| **分布式广播** | `global_emit(Broadcast)` 广播给集群所有实例（跨机器） |
-| **分布式随机** | `global_emit(Random)` 随机投递给一个实例（`SET NX` 保证精确一次） |
+| **本地事件** | `event.emit` 仅当前进程分发 |
+| **分布式广播** | `event.global_emit(..., Broadcast)` 广播给集群所有实例（跨机器） |
+| **分布式随机** | `event.global_emit(..., Random)` 随机投递给一个实例（`SET NX` 精确一次） |
 | **解耦注册** | 处理器按事件名注册，发送方无需知道接收方 |
 | **无 Redis 降级** | 未配置 Redis 时自动回退进程内模式 |
+
+---
+
+## 快速上手
+
+用起来只有三个方法：**`event.on` 注册 → `event.emit` / `event.global_emit` 发送**。
+
+```rust
+use cool_core::event;                 // 命名空间值：event.on / event.emit / event.global_emit
+use cool_core::{DeliverMode, Event};  // 事件类型
+
+// ① 注册处理器（放模块 init() 里，启动时执行一次）
+event.on("order:created", |data| {
+    Box::pin(async move {
+        println!("收到订单创建事件: {data}");
+    })
+});
+
+// ② 发送事件（任意 service / controller 里）
+event.emit("order:created", serde_json::json!({ "id": 1 })).await;                                 // 本进程
+event.global_emit("order:created", serde_json::json!({ "id": 1 }), DeliverMode::Broadcast).await;  // 全集群
+```
+
+> `cool_core::event` 是一个命名空间值，`on` / `emit` / `global_emit` 是它的方法。总线已由框架在启动时初始化，直接调用即可。
+
+- 第一个参数**事件名**：既可传 `Event::SoftDelete` 这类**系统默认事件**，也可传 `"order:created"` 这类**任意字符串**。
+- **数据**参数是 `serde_json::Value`（`serde_json::json!(...)` 或 `serde_json::to_value(&obj)?`）。
+- 处理器闭包签名是 `Fn(EventData) -> BoxFut`，返回 `Box::pin(async move { … })`。
+
+---
 
 ## 系统默认事件
 
@@ -39,60 +69,201 @@ description: 全局事件总线（Redis Pub/Sub），对齐 cool-admin-midway �
 | `Event::Ready` | `onReady` | 服务就绪 |
 | `Event::EsDataChange` | `esDataChange` | ES 数据变更 |
 
-也可使用任意自定义事件名（`&str`），如 `"demo:global"`。
+也可使用任意自定义事件名（`&str`），如 `"demo:global"`、`"order:created"`。
 
-## 注册处理器
+---
 
-处理器 = `Fn(EventData) -> BoxFut` 闭包（对应 `@Event(name)` 标注的方法），在模块 `init()` 时注册：
+## 注册处理器：`event.on`
+
+处理器是一个闭包 `Fn(EventData) -> BoxFut`（对应 TS 里 `@Event(name)` 标注的方法）。
+
+### 1. 最简形式
 
 ```rust
-use cool_core::event::{Event, EventData, global};
+use cool_core::event;
 
-// 模块 init 内（对应 recycle 的 @Event(EVENT.SOFT_DELETE) softDelete 处理器）
-if let Some(bus) = global() {
-    bus.on(Event::SoftDelete, {
-        let svc = recycle_svc.clone();   // 捕获需要的 service
-        move |data: EventData| {
-            let svc = svc.clone();
-            Box::pin(async move {
-                if let Ok(rec) = serde_json::from_value(data) {
-                    svc.record(rec).await;
-                }
-            })
-        }
+event.on("demo:global", |data| {
+    Box::pin(async move {
+        tracing::info!("demo:global 收到 {data}");
+    })
+});
+```
+
+### 2. 捕获 service（模块 init 里注入依赖）
+
+```rust
+use cool_core::event;
+
+pub async fn init(_db: &cool_core::db::DbManager, _cache: cool_core::cache::CacheManager) {
+    let svc = my_service.clone();   // 捕获需要的 service
+    event.on("order:created", move |data| {
+        let svc = svc.clone();      // 每次调用再克隆进 async 块
+        Box::pin(async move {
+            if let Ok(order) = serde_json::from_value::<Order>(data) {
+                svc.on_created(order).await;
+            }
+        })
     });
 }
 ```
 
-> `EventData` = `serde_json::Value`，对应 TS 的 `...args`；处理器内用 `serde_json::from_value` 反序列化为强类型。
+> **要点**：外层闭包是 `Fn`（可多次调用），所以用 `move` 捕获 `svc`，再在闭包体内 `let svc = svc.clone()` 克隆进 `async move` 块。`EventData` = `serde_json::Value`，用 `serde_json::from_value` 反序列化成强类型。
 >
-> 已构建好的 `Handler`（`Arc` 包装）可用 `on_handler(name, h)` 注册。
+> `event.on` 在总线尚未初始化时会**先缓存处理器**，启动完成自动生效——注册与启动顺序无关。
 
-## 发送事件
+### 3. 真实例子：软删除进回收站
+
+框架内置的软删除处理器写法（对齐 midway `@Event(EVENT.SOFT_DELETE) softDelete(params)`），见 `modules/recycle`：
 
 ```rust
-// 仅本进程
-bus.emit(Event::SoftDelete, serde_json::json!({ "table": "demo_item" })).await;
+use cool_core::event;
+use cool_core::Event;
+use cool_core::tenant::SoftDeleteRecord;
 
-// 广播给集群所有实例（跨进程、跨机器）
-bus.global_emit(Event::SoftDelete, data, DeliverMode::Broadcast).await;
-
-// 随机投递给一个实例（精确一次）
-bus.global_emit("demo:job", data, DeliverMode::Random).await;
+// modules/recycle/src/lib.rs 的 init()
+let db = db.clone();
+event.on(Event::SoftDelete, move |data| {
+    let db = db.clone();
+    Box::pin(async move {
+        if let Ok(rec) = serde_json::from_value::<SoftDeleteRecord>(data) {
+            service::data::record(&db, rec).await;
+        }
+    })
+});
 ```
 
-### 投递模式
+### 4. 复用已构建的 Handler
+
+`Handler` 是 `Arc` 包装的处理器，可用 `on_handler` 组合/复用：
+
+```rust
+use std::sync::Arc;
+use cool_core::{event, Handler};
+
+let h: Handler = Arc::new(|data| Box::pin(async move { /* ... */ }));
+event.on_handler("demo:global", h);
+```
+
+---
+
+## 发送事件：`event.emit` / `event.global_emit`
+
+```rust
+use cool_core::event;
+use cool_core::{DeliverMode, Event};
+
+// 仅本进程生效
+event.emit(Event::SoftDelete, serde_json::json!({ "table": "demo_item" })).await;
+event.emit("order:created", serde_json::json!({ "id": 1 })).await;
+
+// 广播给集群所有实例（跨进程、跨机器）
+event.global_emit("cache:invalidate", serde_json::json!({ "key": "order:1" }), DeliverMode::Broadcast).await;
+
+// 随机投递给一个实例（精确一次）
+event.global_emit("job:daily-report", serde_json::json!({}), DeliverMode::Random).await;
+```
+
+在 service / controller / 任何 async 处直接调用即可（无需拿到总线句柄）：
+
+```rust
+use cool_core::{event, DeliverMode};
+
+pub async fn create_order(...) -> Result<...> {
+    let order = /* 落库 */;
+    let ev = OrderCreated { id: order.id, /* ... */ };
+    // 广播：集群每个节点都收到（如刷新缓存）
+    event.global_emit("order:created", serde_json::to_value(&ev)?, DeliverMode::Broadcast).await;
+    Ok(...)
+}
+```
+
+---
+
+## 投递模式详解
 
 | 模式 | 行为 | 适用 |
 |------|------|------|
-| `DeliverMode::Broadcast` | 本实例立即执行，其余实例经 Redis 收到后执行（跳过自身，避免重复） | 缓存失效、日志广播 |
-| `DeliverMode::Random` | 不预执行，所有实例收到后 `SET NX` 抢占，只有一个执行 | 单点任务、定时作业 |
+| `DeliverMode::Broadcast` | **本实例立即执行**，其余实例经 Redis 收到后执行（按 `from` 跳过自身，避免重复） | 缓存失效、日志广播、通知刷新 |
+| `DeliverMode::Random` | **不预执行**，所有实例（含自身）收到后 `SET NX` 抢占，只有一个执行 | 单点任务、定时作业、去重消费 |
 
-> **软删除用本地 `emit` 而非 `global_emit`**：回收落库是共享存储，跨机执行会产生重复记录。软删除时框架经 `emit(Event::SoftDelete, …)` 触发，对齐 cool-admin-midway core 的 `coolEventManager.emit(EVENT.SOFT_DELETE, params)`。
+**Broadcast（广播）**——每个实例各执行一次：
+
+```text
+  节点 A  event.global_emit(Broadcast) ──┬──▶ 节点 A handler（本地立即执行）
+                                         ├──▶ 节点 B handler
+                                         └──▶ 节点 C handler
+```
+
+**Random（随机）**——只有一个实例执行（精确一次）：
+
+```text
+  节点 A  event.global_emit(Random) ──▶ Redis ──▶ A/B/C 都收到，SET NX 抢占
+                                                       └─ 只有赢家执行 handler
+```
+
+> **软删除用本地 `event.emit` 而非 `event.global_emit`**：回收落库是共享存储，跨机执行会产生重复记录。框架软删除时经 `event.emit(Event::SoftDelete, …)` 触发（本进程），对齐 cool-admin-midway core 的 `coolEventManager.emit(EVENT.SOFT_DELETE, params)`。
+
+---
+
+## 完整端到端示例
+
+「订单创建 → 广播通知所有节点刷新缓存」：
+
+**① 定义事件负载**
+
+```rust
+#[derive(serde::Serialize, serde::Deserialize)]
+struct OrderCreated { id: i64, user_id: i64, amount: i64 }
+```
+
+**② 在模块 `init()` 注册处理器**
+
+```rust
+use cool_core::event;
+
+pub async fn init(_db: &cool_core::db::DbManager, cache: cool_core::cache::CacheManager) {
+    event.on("order:created", move |data| {
+        let cache = cache.clone();
+        Box::pin(async move {
+            if let Ok(ev) = serde_json::from_value::<OrderCreated>(data) {
+                cache.remove(&format!("order:{}", ev.id)).await;  // 每个节点各刷新本地缓存
+                tracing::info!(id = ev.id, "已刷新订单缓存");
+            }
+        })
+    });
+}
+```
+
+**③ 在 service 里发送（广播）**
+
+```rust
+use cool_core::{event, DeliverMode};
+
+pub async fn create_order(...) -> Result<...> {
+    let order = /* 落库 */;
+    let ev = OrderCreated { id: order.id, user_id: order.user_id, amount: order.amount };
+    event.global_emit("order:created", serde_json::to_value(&ev)?, DeliverMode::Broadcast).await;
+    Ok(...)
+}
+```
+
+**④（可选）HTTP 接口手动触发**
+
+```rust
+use axum::Json;
+use cool_core::{event, DeliverMode};
+
+pub async fn trigger(Json(payload): Json<serde_json::Value>) -> &'static str {
+    event.global_emit("order:created", payload, DeliverMode::Broadcast).await;
+    "ok"
+}
+```
+
+---
 
 ## 配置
 
-事件总线在应用启动时由 `app.rs` 装配（构造 + 设为全局 + 启动订阅），Redis 复用 `cool.redis`：
+事件总线在应用启动时由 `app.rs` 装配（构造 + 设为全局 + 启动订阅），Redis 复用 `redis.cool`：
 
 ```yaml
 redis:
@@ -102,9 +273,9 @@ redis:
     password: ""
 ```
 
-未配置 `redis.cool` 时，`global_emit` 自动回退为进程内 `emit`（单机开发无需 Redis）。
+未配置 `redis.cool` 时，`event.global_emit` 自动回退为进程内 `event.emit`（单机开发无需 Redis）。
 
-`EventBusConfig` 字段：
+`EventBusConfig` 字段（一般无需手写，框架默认即可）：
 
 | 字段 | 默认 | 说明 |
 |------|------|------|
@@ -115,18 +286,33 @@ redis:
 | `claim_ttl_secs` | `30` | random 模式抢占锁过期时间 |
 | `fallback_local` | `true` | Redis 不可用时是否回退进程内广播 |
 
-## 参考
+---
+
+## API 参考
+
+**命名空间方法（`cool_core::event`）**：
+
+| 方法 | 说明 |
+|------|------|
+| `event.on(name, f)` | 注册处理器（闭包 `Fn(EventData) -> BoxFut`） |
+| `event.on_handler(name, h)` | 注册已构建的 `Handler` |
+| `event.emit(name, data)` | 本地分发（`data: impl Into<EventData>`） |
+| `event.global_emit(name, data, mode)` | 分布式投递（`mode: DeliverMode`） |
+| `event.global()` / `event.init_global(bus)` | 取全局总线 / 初始化（框架调用） |
+| `event.is_local_only()` / `event.instance_id()` | 状态查询 |
+
+**类型（`cool_core` 下）**：
 
 | API | 说明 |
 |-----|------|
 | `Event` | 系统默认事件枚举（`as_str()` 取事件名） |
 | `DeliverMode` | `Broadcast` / `Random` |
-| `EventBus::on(name, f)` | 注册处理器（闭包） |
-| `EventBus::on_handler(name, h)` | 注册已构建的 `Handler` |
-| `EventBus::emit(name, data)` | 本地分发 |
-| `EventBus::global_emit(name, data, mode)` | 分布式投递 |
-| `EventBus::start_listener()` | 启动 Redis 订阅（处理器注册后调用） |
-| `event::global()` / `init_global()` | 全局单例（无句柄调用点发射） |
+| `EventData` | `serde_json::Value` |
+| `BoxFut` | `Pin<Box<dyn Future<Output=()> + Send>>` |
+| `Handler` | `Arc<dyn Fn(EventData) -> BoxFut + Send + Sync>` |
+| `EventBus` / `EventBusConfig` | 总线实例 / 配置（进阶） |
 
-- 软删除记录 `SoftDeleteRecord`（`{ table, ids, rows, userId, url }`）经 `Event::SoftDelete` 携带，回收站可据此落库。
+**进阶（拿到 `EventBus` 实例后）**：`EventBus::start_listener()`（启动订阅）、`is_local_only()`、`instance_id()`、`handler_count()`。
+
+- 软删除记录 `SoftDeleteRecord`（`{ table, ids, rows, userId, url }`）经 `Event::SoftDelete` 携带，回收站据此落库。
 - 更多分布式能力见 [分布式](/distributed)。

@@ -235,14 +235,26 @@ cool-axum/
 
 对齐 cool-admin-midway 事件框架（`@CoolEvent` / `@Event`）+ `DistributedEventBus`（Redis Pub/Sub）。
 
-### 事件总线（`crates/cool-core::event`）
-- `EventBus::on(name, handler)` 注册处理器（等价 `@Event(name)`）；`on_handler` 注册已构建 `Handler`
-- `emit` 本进程分发；`global_emit` 经 Redis Pub/Sub 跨进程、跨机器投递
+### 事件总线（`cool_core::event`，方法式 API）
+- `event.on(name, handler)` 注册处理器（等价 `@Event(name)`）；`event.on_handler` 注册已构建 `Handler`
+- `event.emit` 本进程分发；`event.global_emit` 经 Redis Pub/Sub 跨进程、跨机器投递
 - 投递模式：`Broadcast`（广播所有实例）/ `Random`（`SET NX` 抢占，精确一次投递给一个实例）
 - 系统默认事件 `Event`（`onSoftDelete` / `onServerReady` / `onReady` / `esDataChange`）字符串值与 TS 逐字一致
 - 无 Redis 自动降级为进程内模式；频道 `cool:event:bus:{keys}` 多项目隔离
 
 ### 集成
-- 软删除经 `notify_soft_delete` → `emit(Event::SoftDelete)` 触发（对齐 core `coolEventManager.emit(EVENT.SOFT_DELETE)`）
-- 启动装配：构造 + `init_global` + `start_listener` + 生命周期事件（`onReady` / `onServerReady`）
+- 软删除经 `notify_soft_delete` → `event.emit(Event::SoftDelete)` 触发（对齐 core `coolEventManager.emit(EVENT.SOFT_DELETE)`）
+- 启动装配：构造 + `event.init_global` + `start_listener` + 生命周期事件（`onReady` / `onServerReady`）
 - 新增文档页 [分布式事件](/event)
+
+## Unreleased · crate 合并
+
+将基础设施 crate 合并进 `cool-core`，精简 workspace。
+
+### 合并范围
+- `cool-config` / `cool-db` / `cool-auth` / `cool-cache` / `cool-file` / `cool-raft` → `crates/cool-core` 的 `config` / `db` / `auth` / `cache` / `file` / `raft` 模块
+- `crates/` 现仅保留 `cool-core` 与 `cool-gen`
+- 引用路径：`cool_db::X` → `cool_core::db::X`（其余同理）
+
+### 影响
+- 对外类型不变，仅命名空间改为 `cool_core::{config,db,auth,cache,file,raft}`；`cool-gen` 改依赖 `cool-core`

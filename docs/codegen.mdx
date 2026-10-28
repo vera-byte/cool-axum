@@ -194,6 +194,6 @@ cargo build --workspace
 `crud` 用 `/{module}/{table}` 作为前缀，合并时按需改成 `/admin/...`。
 
 **Q: 列类型没映射好？**  
-生成的是逻辑类型（`varchar`/`int`/`datetime`…），与 `cool-db::ColumnMeta` 一致；特殊类型可手改 `tables.rs`。
+生成的是逻辑类型（`varchar`/`int`/`datetime`…），与 `cool_core::db::ColumnMeta` 一致；特殊类型可手改 `tables.rs`。
 
 相关阅读：[CRUD 引擎](/crud) · [模块结构](/modules) · [配置说明](/configuration)

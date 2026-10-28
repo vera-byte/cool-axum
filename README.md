@@ -134,13 +134,7 @@ cool-axum/
 │   ├── space/             # 文件空间
 │   └── demo/              # 示例模块
 ├── crates/                # 基础设施库
-│   ├── cool-config/       # 配置加载（对齐 cool-admin-go config.yaml）
-│   ├── cool-db/           # 数据源、autoMigrate、种子填充
-│   ├── cool-core/         # CRUD 引擎：SqlBuilder / QueryOp / CrudService
-│   ├── cool-auth/         # sa-token 封装：登录、权限、密码哈希
-│   ├── cool-cache/        # 缓存：内存 / Redis 双模式
-│   ├── cool-file/         # 文件上传：local / minio / oss
-│   ├── cool-raft/         # openraft 选主 + RocksDB 持久化 + HTTP RPC
+│   ├── cool-core/         # 核心：CRUD 引擎 + config/db/auth/cache/file/raft 模块
 │   └── cool-gen/          # 代码生成器 CLI
 ├── docs/                  # Mintlify 文档站
 ├── deploy/                # nginx.conf / K8s 清单
@@ -251,6 +245,20 @@ cargo run -p cool-gen -- module report                     # 创建模块脚手�
 cargo run -p cool-gen -- crud demo_goods --module demo     # 从表生成 CRUD
 ```
 
+### 分布式事件
+
+详见 [docs/event.mdx](docs/event.mdx)。事件总线（Redis Pub/Sub）支持本地 / 广播 / 随机投递：
+
+```rust
+use cool_core::{event, DeliverMode};
+
+event.on("order:created", |data| Box::pin(async move { /* 处理 */ }));   // 注册处理器
+event.emit("order:created", serde_json::json!({ "id": 1 })).await;       // 本进程
+event.global_emit("order:created", data, DeliverMode::Broadcast).await;  // 广播全集群
+```
+
+> ⚠️ **先注册，后发射**：事件是发布/订阅，处理器必须先用 `event.on` 注册，之后 `event.emit` / `event.global_emit` 发出的事件才能被收到。若发射时还没有注册处理器，事件会被直接丢弃（`Broadcast` 在本地立即分发，事后补注册不会重放）。
+
 ---
 
 ## 部署
@@ -310,10 +318,10 @@ cargo clippy --workspace --all-targets   # 0 告警
 | cool-admin-go | cool-axum |
 |---------------|-----------|
 | `cool/`（Model/Service/Controller） | `crates/cool-core` |
-| `cool/coolconfig` | `crates/cool-config` |
-| `cool/cooldb` / `initdb` | `crates/cool-db` |
-| `cool/coolfile` + `contrib/files` | `crates/cool-file` |
-| `cool.CacheManager` | `crates/cool-cache` |
+| `cool/coolconfig` | `crates/cool-core`（`config` 模块） |
+| `cool/cooldb` / `initdb` | `crates/cool-core`（`db` 模块） |
+| `cool/coolfile` + `contrib/files` | `crates/cool-core`（`file` 模块） |
+| `cool.CacheManager` | `crates/cool-core`（`cache` 模块） |
 | JWT 登录 | sa-token-rust |
 | `modules/base` | `modules/base` |
 | `modules/dict` | `modules/dict` |

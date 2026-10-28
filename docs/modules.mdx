@@ -201,7 +201,7 @@ pub async fn init(db: &DbManager, cache: CacheManager) {
     tracing::debug!("module base init start ...");
 
     // FillInitData 逐表初始化
-    cool_db::fill_init_data(db, "default", "base_sys_menu", initjson::MENU).await;
+    cool_core::db::fill_init_data(db, "default", "base_sys_menu", initjson::MENU).await;
     // ...8 张表
 
     login::init_cache(cache);      // 模块专属
